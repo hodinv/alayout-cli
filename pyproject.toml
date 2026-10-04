@@ -1,0 +1,23 @@
+[project]
+name = "layoutcli"
+version = "0.1.0"
+description = "Inspect Android app layouts from the terminal"
+requires-python = ">=3.10"
+dependencies = ["textual>=1.0", "rich>=13", "typer>=0.12"]
+
+[project.scripts]
+layoutcli = "layoutcli.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/layoutcli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

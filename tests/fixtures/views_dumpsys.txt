@@ -1,0 +1,25 @@
+TASK 42 id=42 userId=0
+  ACTIVITY com.example.demo/.MainActivity 7c1d2e3 pid=4321
+    Local Activity a1b2c3d State:
+      mResumed=true mStopped=false mFinished=false
+      mIsChangingConfigurations=false
+    ViewRoot:
+      mAdded=true mRemoved=false
+    View Hierarchy:
+      DecorView@5e6f7a8[MainActivity]
+        android.widget.LinearLayout{1111111 V.E...... ........ 0,0-1080,2400}
+          android.view.ViewStub{2222222 G.E...... ......I. 0,0-0,0 #1020386 android:id/action_mode_bar_stub}
+          android.widget.FrameLayout{3333333 V.E...... ........ 0,63-1080,2400 #1020002 android:id/content}
+            androidx.constraintlayout.widget.ConstraintLayout{4444444 V.E...... ........ 0,0-1080,2337 #7f0a0123 app:id/root}
+              com.google.android.material.appbar.MaterialToolbar{5555555 V.E...... ........ 0,0-1080,147 #7f0a0200 app:id/toolbar}
+                androidx.appcompat.widget.AppCompatTextView{6666666 V.ED..... ........ 42,38-300,109}
+              androidx.recyclerview.widget.RecyclerView{7777777 VFED..... .F...... 0,147-1080,1500 #7f0a0300 app:id/list}
+                androidx.appcompat.widget.AppCompatTextView{8888888 V.ED..C.. ........ 0,0-1080,126 #7f0a0301 app:id/item_title aid=1073741824}
+                androidx.appcompat.widget.AppCompatTextView{9999999 V.ED..C.. ........ 0,126-1080,252 #7f0a0301 app:id/item_title aid=1073741825}
+              androidx.appcompat.widget.AppCompatImageButton{aaaaaaa V.ED..C.. ........ 960,1520-1050,1610 #7f0a0400 app:id/fab_small}
+              android.widget.ProgressBar{bbbbbbb I.ED..... ........ 500,1700-580,1780 #7f0a0500 app:id/progress}
+              androidx.compose.ui.platform.ComposeView{ccccccc V.E...... ........ 0,1800-1080,2337 #7f0a0600 app:id/compose_host}
+                androidx.compose.ui.platform.AndroidComposeView{ddddddd VFED..... ........ 0,0-1080,537}
+                  androidx.compose.ui.platform.AndroidViewsHandler{eeeeeee V.E...... ......ID 0,0-0,0}
+    Looper (main, tid 1) {1234abc}
+      (Total messages: 0, polling=true, quitting=false)

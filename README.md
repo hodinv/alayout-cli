@@ -2,17 +2,44 @@
 
 Inspect the layout of a running Android app from the terminal: one-shot capture, then explore it offline.
 
-## Install
+## Installation
 
-The PyPI package is `alayout-cli`; the command it installs is `alayout`.
+The package is **`alayout-cli`**, the command it installs is **`alayout`**.
 
-    uv tool install alayout-cli      # or: pipx install alayout-cli  (once published)
-    uv tool install .                # from a checkout of this repository
+**With [uv](https://docs.astral.sh/uv/)** (recommended — it downloads a suitable Python itself):
 
-For development:
+```sh
+uv tool install alayout-cli
+uv tool upgrade alayout-cli      # later updates
+```
 
-    uv sync
-    uv run alayout --help
+or with pipx: `pipx install alayout-cli`. Works the same on Windows, macOS and Linux.
+
+**Without Python:** download the single-file binary for your OS from the
+[latest release](https://github.com/hodinv/alayout-cli/releases/latest) and put it on your PATH:
+
+| OS | File | Notes |
+|---|---|---|
+| Windows | `alayout-<version>-windows-x86_64.exe` | rename to `alayout.exe`; SmartScreen may ask once (More info → Run anyway) |
+| macOS (Apple silicon) | `alayout-<version>-macos-arm64` | `chmod +x`, then `xattr -d com.apple.quarantine <file>` (unsigned) |
+| Linux | `alayout-<version>-linux-x86_64` | `chmod +x` |
+
+The binaries unpack themselves to the temp folder on start (about 1 s).
+
+**Check an installation:** `alayout --version`, or `alayout --self-test SNAPSHOT_DIR` opens a saved
+snapshot headless and prints e.g. `alayout 0.1.0 self-test: OK 18 views, 2 warnings, screenshot 108x240`.
+
+You need Android platform-tools (`adb`), which is already there if Android Studio is installed.
+
+**From a checkout** (development):
+
+```sh
+uv sync
+uv run alayout --help
+uv run pytest
+```
+
+Releases: see [RELEASING.md](RELEASING.md).
 
 ## Usage
 

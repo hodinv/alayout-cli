@@ -1,1 +1,3 @@
-"""Android layout inspector CLI."""
+"""alayout — Android layout inspector for the terminal."""
+
+__version__ = "0.1.0"

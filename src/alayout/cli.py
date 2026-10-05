@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
+from alayout import __version__
 from alayout.adb import Adb, AdbError, find_adb
 from alayout.apk import ApkError, apply_index, build_index, find_aapt2
 from alayout.build import BuildError, build_snapshot
@@ -148,15 +149,64 @@ def _global(ctx: typer.Context, serial: str | None, adb: str | None, apk: str | 
     return serial or given.get("serial"), adb or given.get("adb"), apk or given.get("apk")
 
 
+def _self_test(directory: Path) -> int:
+    """Open a snapshot in the full TUI headless and print a summary.
+
+    Verifies an installed package or a frozen binary (all modules and widgets load, the
+    screenshot renders). Exit code 0 on success.
+    """
+    try:
+        snap = load_snapshot(directory)
+    except SnapshotError as e:
+        console.print(f"alayout {__version__} self-test: FAILED {escape(str(e))}")
+        return 1
+
+    async def pilot_script(pilot) -> None:
+        app = pilot.app
+        await pilot.pause()
+        problems = []
+        if app._image is not None:
+            await pilot.press("p")
+            await pilot.pause()
+            if "\u2580" not in app.query_one("#wire").render().plain:
+                problems.append("screenshot preview not rendered")
+            await pilot.press("s")
+            await pilot.pause()
+            if app.screen.__class__.__name__ != "ScreenshotScreen":
+                problems.append("full-screen screenshot not shown")
+            await pilot.press("escape")
+        await pilot.press("c")
+        await pilot.pause()
+        views = sum(1 for _ in snap.root.walk())
+        warnings = sum(1 for i in app.issues if i.severity == "warning")
+        shot = "{}x{}".format(*app._image.size) if app._image is not None else "none"
+        status = "FAILED " + "; ".join(problems) if problems else "OK"
+        app.exit(f"{status} {views} views, {warnings} warnings, screenshot {shot}")
+
+    result = LayoutApp(snap, base_dir=directory).run(headless=True, auto_pilot=pilot_script)
+    console.print(f"alayout {__version__} self-test: {escape(str(result))}")
+    return 0 if isinstance(result, str) and result.startswith("OK") else 1
+
+
 def _fail(error: Exception) -> typer.Exit:
     err_console.print(f"[red]error:[/] {escape(str(error))}")
     return typer.Exit(code=1)
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None) -> None:
+def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
+         version: Annotated[bool, typer.Option("--version", help="Print the version and exit.")] = False,
+         self_test: Annotated[Optional[Path], typer.Option(
+             "--self-test", metavar="SNAPSHOT_DIR",
+             help="Open a snapshot headless, print a summary and exit (checks an installation).")] = None,
+         ) -> None:
     """Capture and inspect Android app layouts."""
     _utf8_output()
+    if version:
+        console.print(f"alayout {__version__}")
+        raise typer.Exit()
+    if self_test is not None:
+        raise typer.Exit(code=_self_test(self_test))
     ctx.obj = {"serial": serial, "adb": adb, "apk": apk}  # also accepted before the command
     if ctx.invoked_subcommand is None:
         try:

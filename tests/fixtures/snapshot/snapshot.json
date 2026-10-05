@@ -1,0 +1,616 @@
+{
+ "format": 1,
+ "package": "com.example.demo",
+ "activity": "com.example.demo.MainActivity",
+ "device": {
+  "serial": "emulator-5554",
+  "model": "Pixel 7",
+  "sdk": "34"
+ },
+ "captured_at": "2026-10-05T12:00:00+00:00",
+ "screen": [
+  1080,
+  2400
+ ],
+ "density": 420,
+ "capabilities": {
+  "dumpsys": "ok",
+  "uiautomator": "ok",
+  "screenshot": "ok"
+ },
+ "screenshot": "screen.png",
+ "root": {
+  "class": "DecorView",
+  "id": null,
+  "bounds": [
+   0,
+   0,
+   1080,
+   2400
+  ],
+  "visibility": "visible",
+  "text": null,
+  "sources": [
+   "dumpsys",
+   "uiautomator"
+  ],
+  "props": {
+   "dumpsys": {
+    "hash": "5e6f7a8"
+   },
+   "uiautomator": {
+    "index": "0",
+    "text": "",
+    "resource-id": "",
+    "class": "android.widget.FrameLayout",
+    "package": "com.example.demo",
+    "content-desc": "",
+    "clickable": "false",
+    "enabled": "true",
+    "bounds": "[0,0][1080,2400]"
+   }
+  },
+  "children": [
+   {
+    "class": "android.widget.LinearLayout",
+    "id": null,
+    "bounds": [
+     0,
+     0,
+     1080,
+     2400
+    ],
+    "visibility": "visible",
+    "text": null,
+    "sources": [
+     "dumpsys",
+     "uiautomator"
+    ],
+    "props": {
+     "dumpsys": {
+      "hash": "1111111",
+      "flags": "V.E...... ........",
+      "rel_bounds": "[0,0][1080,2400]"
+     },
+     "uiautomator": {
+      "index": "0",
+      "text": "",
+      "resource-id": "",
+      "class": "android.widget.LinearLayout",
+      "package": "com.example.demo",
+      "content-desc": "",
+      "clickable": "false",
+      "enabled": "true",
+      "bounds": "[0,0][1080,2400]"
+     }
+    },
+    "children": [
+     {
+      "class": "android.view.ViewStub",
+      "id": "action_mode_bar_stub",
+      "bounds": [
+       0,
+       0,
+       0,
+       0
+      ],
+      "visibility": "gone",
+      "text": null,
+      "sources": [
+       "dumpsys"
+      ],
+      "props": {
+       "dumpsys": {
+        "hash": "2222222",
+        "flags": "G.E...... ......I.",
+        "rel_bounds": "[0,0][0,0]",
+        "resource_id": "android:id/action_mode_bar_stub"
+       }
+      },
+      "children": []
+     },
+     {
+      "class": "android.widget.FrameLayout",
+      "id": "content",
+      "bounds": [
+       0,
+       63,
+       1080,
+       2400
+      ],
+      "visibility": "visible",
+      "text": null,
+      "sources": [
+       "dumpsys",
+       "uiautomator"
+      ],
+      "props": {
+       "dumpsys": {
+        "hash": "3333333",
+        "flags": "V.E...... ........",
+        "rel_bounds": "[0,63][1080,2400]",
+        "resource_id": "android:id/content"
+       },
+       "uiautomator": {
+        "index": "1",
+        "text": "",
+        "resource-id": "android:id/content",
+        "class": "android.widget.FrameLayout",
+        "package": "com.example.demo",
+        "content-desc": "",
+        "clickable": "false",
+        "enabled": "true",
+        "bounds": "[0,63][1080,2400]"
+       }
+      },
+      "children": [
+       {
+        "class": "androidx.constraintlayout.widget.ConstraintLayout",
+        "id": "root",
+        "bounds": [
+         0,
+         63,
+         1080,
+         2400
+        ],
+        "visibility": "visible",
+        "text": null,
+        "sources": [
+         "dumpsys",
+         "uiautomator"
+        ],
+        "props": {
+         "dumpsys": {
+          "hash": "4444444",
+          "flags": "V.E...... ........",
+          "rel_bounds": "[0,0][1080,2337]",
+          "resource_id": "app:id/root"
+         },
+         "uiautomator": {
+          "index": "0",
+          "text": "",
+          "resource-id": "com.example.demo:id/root",
+          "class": "android.view.ViewGroup",
+          "package": "com.example.demo",
+          "content-desc": "",
+          "clickable": "false",
+          "enabled": "true",
+          "bounds": "[0,63][1080,2400]"
+         }
+        },
+        "children": [
+         {
+          "class": "com.google.android.material.appbar.MaterialToolbar",
+          "id": "toolbar",
+          "bounds": [
+           0,
+           63,
+           1080,
+           210
+          ],
+          "visibility": "visible",
+          "text": null,
+          "sources": [
+           "dumpsys",
+           "uiautomator"
+          ],
+          "props": {
+           "dumpsys": {
+            "hash": "5555555",
+            "flags": "V.E...... ........",
+            "rel_bounds": "[0,0][1080,147]",
+            "resource_id": "app:id/toolbar"
+           },
+           "uiautomator": {
+            "index": "0",
+            "text": "",
+            "resource-id": "com.example.demo:id/toolbar",
+            "class": "android.view.ViewGroup",
+            "package": "com.example.demo",
+            "content-desc": "",
+            "clickable": "false",
+            "enabled": "true",
+            "bounds": "[0,63][1080,210]"
+           }
+          },
+          "children": [
+           {
+            "class": "androidx.appcompat.widget.AppCompatTextView",
+            "id": null,
+            "bounds": [
+             42,
+             101,
+             300,
+             172
+            ],
+            "visibility": "visible",
+            "text": "Demo",
+            "sources": [
+             "dumpsys",
+             "uiautomator"
+            ],
+            "props": {
+             "dumpsys": {
+              "hash": "6666666",
+              "flags": "V.ED..... ........",
+              "rel_bounds": "[42,38][300,109]"
+             },
+             "uiautomator": {
+              "index": "0",
+              "text": "Demo",
+              "resource-id": "",
+              "class": "android.widget.TextView",
+              "package": "com.example.demo",
+              "content-desc": "",
+              "clickable": "false",
+              "enabled": "true",
+              "bounds": "[42,101][300,172]"
+             }
+            },
+            "children": []
+           }
+          ]
+         },
+         {
+          "class": "androidx.recyclerview.widget.RecyclerView",
+          "id": "list",
+          "bounds": [
+           0,
+           210,
+           1080,
+           1563
+          ],
+          "visibility": "visible",
+          "text": null,
+          "sources": [
+           "dumpsys",
+           "uiautomator"
+          ],
+          "props": {
+           "dumpsys": {
+            "hash": "7777777",
+            "flags": "VFED..... .F......",
+            "rel_bounds": "[0,147][1080,1500]",
+            "resource_id": "app:id/list"
+           },
+           "uiautomator": {
+            "index": "1",
+            "text": "",
+            "resource-id": "com.example.demo:id/list",
+            "class": "androidx.recyclerview.widget.RecyclerView",
+            "package": "com.example.demo",
+            "content-desc": "",
+            "clickable": "false",
+            "enabled": "true",
+            "scrollable": "true",
+            "bounds": "[0,210][1080,1563]"
+           }
+          },
+          "children": [
+           {
+            "class": "androidx.appcompat.widget.AppCompatTextView",
+            "id": "item_title",
+            "bounds": [
+             0,
+             210,
+             1080,
+             336
+            ],
+            "visibility": "visible",
+            "text": "First item",
+            "sources": [
+             "dumpsys",
+             "uiautomator"
+            ],
+            "props": {
+             "dumpsys": {
+              "hash": "8888888",
+              "flags": "V.ED..C.. ........",
+              "rel_bounds": "[0,0][1080,126]",
+              "resource_id": "app:id/item_title"
+             },
+             "uiautomator": {
+              "index": "0",
+              "text": "First item",
+              "resource-id": "com.example.demo:id/item_title",
+              "class": "android.widget.TextView",
+              "package": "com.example.demo",
+              "content-desc": "",
+              "clickable": "true",
+              "enabled": "true",
+              "bounds": "[0,210][1080,336]"
+             }
+            },
+            "children": []
+           },
+           {
+            "class": "androidx.appcompat.widget.AppCompatTextView",
+            "id": "item_title",
+            "bounds": [
+             0,
+             336,
+             1080,
+             462
+            ],
+            "visibility": "visible",
+            "text": "Second item",
+            "sources": [
+             "dumpsys",
+             "uiautomator"
+            ],
+            "props": {
+             "dumpsys": {
+              "hash": "9999999",
+              "flags": "V.ED..C.. ........",
+              "rel_bounds": "[0,126][1080,252]",
+              "resource_id": "app:id/item_title"
+             },
+             "uiautomator": {
+              "index": "1",
+              "text": "Second item",
+              "resource-id": "com.example.demo:id/item_title",
+              "class": "android.widget.TextView",
+              "package": "com.example.demo",
+              "content-desc": "",
+              "clickable": "true",
+              "enabled": "true",
+              "bounds": "[0,336][1080,462]"
+             }
+            },
+            "children": []
+           }
+          ]
+         },
+         {
+          "class": "androidx.appcompat.widget.AppCompatImageButton",
+          "id": "fab_small",
+          "bounds": [
+           960,
+           1583,
+           1050,
+           1673
+          ],
+          "visibility": "visible",
+          "text": null,
+          "sources": [
+           "dumpsys",
+           "uiautomator"
+          ],
+          "props": {
+           "dumpsys": {
+            "hash": "aaaaaaa",
+            "flags": "V.ED..C.. ........",
+            "rel_bounds": "[960,1520][1050,1610]",
+            "resource_id": "app:id/fab_small"
+           },
+           "uiautomator": {
+            "index": "2",
+            "text": "",
+            "resource-id": "com.example.demo:id/fab_small",
+            "class": "android.widget.ImageButton",
+            "package": "com.example.demo",
+            "content-desc": "",
+            "clickable": "true",
+            "enabled": "true",
+            "bounds": "[960,1583][1050,1673]"
+           }
+          },
+          "children": []
+         },
+         {
+          "class": "android.widget.ProgressBar",
+          "id": "progress",
+          "bounds": [
+           500,
+           1763,
+           580,
+           1843
+          ],
+          "visibility": "invisible",
+          "text": null,
+          "sources": [
+           "dumpsys"
+          ],
+          "props": {
+           "dumpsys": {
+            "hash": "bbbbbbb",
+            "flags": "I.ED..... ........",
+            "rel_bounds": "[500,1700][580,1780]",
+            "resource_id": "app:id/progress"
+           }
+          },
+          "children": []
+         },
+         {
+          "class": "androidx.compose.ui.platform.ComposeView",
+          "id": "compose_host",
+          "bounds": [
+           0,
+           1863,
+           1080,
+           2400
+          ],
+          "visibility": "visible",
+          "text": null,
+          "sources": [
+           "dumpsys",
+           "uiautomator"
+          ],
+          "props": {
+           "dumpsys": {
+            "hash": "ccccccc",
+            "flags": "V.E...... ........",
+            "rel_bounds": "[0,1800][1080,2337]",
+            "resource_id": "app:id/compose_host"
+           },
+           "uiautomator": {
+            "index": "3",
+            "text": "",
+            "resource-id": "com.example.demo:id/compose_host",
+            "class": "android.view.ViewGroup",
+            "package": "com.example.demo",
+            "content-desc": "",
+            "clickable": "false",
+            "enabled": "true",
+            "bounds": "[0,1863][1080,2400]"
+           }
+          },
+          "children": [
+           {
+            "class": "androidx.compose.ui.platform.AndroidComposeView",
+            "id": null,
+            "bounds": [
+             0,
+             1863,
+             1080,
+             2400
+            ],
+            "visibility": "visible",
+            "text": null,
+            "sources": [
+             "dumpsys",
+             "uiautomator"
+            ],
+            "props": {
+             "dumpsys": {
+              "hash": "ddddddd",
+              "flags": "VFED..... ........",
+              "rel_bounds": "[0,0][1080,537]"
+             },
+             "uiautomator": {
+              "index": "0",
+              "text": "",
+              "resource-id": "",
+              "class": "android.view.View",
+              "package": "com.example.demo",
+              "content-desc": "",
+              "clickable": "false",
+              "enabled": "true",
+              "bounds": "[0,1863][1080,2400]"
+             }
+            },
+            "children": [
+             {
+              "class": "androidx.compose.ui.platform.AndroidViewsHandler",
+              "id": null,
+              "bounds": [
+               0,
+               1863,
+               0,
+               1863
+              ],
+              "visibility": "visible",
+              "text": null,
+              "sources": [
+               "dumpsys"
+              ],
+              "props": {
+               "dumpsys": {
+                "hash": "eeeeeee",
+                "flags": "V.E...... ......ID",
+                "rel_bounds": "[0,0][0,0]"
+               }
+              },
+              "children": []
+             },
+             {
+              "class": "android.widget.TextView",
+              "id": null,
+              "bounds": [
+               42,
+               1900,
+               500,
+               1960
+              ],
+              "visibility": "visible",
+              "text": "Hello Compose",
+              "sources": [
+               "uiautomator"
+              ],
+              "props": {
+               "uiautomator": {
+                "index": "0",
+                "text": "Hello Compose",
+                "resource-id": "",
+                "class": "android.widget.TextView",
+                "package": "com.example.demo",
+                "content-desc": "",
+                "clickable": "false",
+                "enabled": "true",
+                "bounds": "[42,1900][500,1960]"
+               }
+              },
+              "children": []
+             },
+             {
+              "class": "android.widget.Button",
+              "id": null,
+              "bounds": [
+               42,
+               2000,
+               400,
+               2126
+              ],
+              "visibility": "visible",
+              "text": null,
+              "sources": [
+               "uiautomator"
+              ],
+              "props": {
+               "uiautomator": {
+                "index": "1",
+                "text": "",
+                "resource-id": "",
+                "class": "android.widget.Button",
+                "package": "com.example.demo",
+                "content-desc": "",
+                "clickable": "true",
+                "enabled": "true",
+                "bounds": "[42,2000][400,2126]"
+               }
+              },
+              "children": [
+               {
+                "class": "android.widget.TextView",
+                "id": null,
+                "bounds": [
+                 100,
+                 2040,
+                 340,
+                 2090
+                ],
+                "visibility": "visible",
+                "text": "Click me",
+                "sources": [
+                 "uiautomator"
+                ],
+                "props": {
+                 "uiautomator": {
+                  "index": "0",
+                  "text": "Click me",
+                  "resource-id": "",
+                  "class": "android.widget.TextView",
+                  "package": "com.example.demo",
+                  "content-desc": "",
+                  "clickable": "false",
+                  "enabled": "true",
+                  "bounds": "[100,2040][340,2090]"
+                 }
+                },
+                "children": []
+               }
+              ]
+             }
+            ]
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

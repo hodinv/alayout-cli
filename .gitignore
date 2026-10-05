@@ -4,3 +4,7 @@ __pycache__/
 .pytest_cache/
 layout-snapshots/
 dist/
+build/
+*.spec
+*.pyc
+local.properties

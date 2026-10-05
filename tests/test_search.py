@@ -27,3 +27,11 @@ def test_keep_set_contains_matches_and_ancestors():
     assert [n.class_name for n in keep if n.children and n is not root].count("android.widget.LinearLayout") == 1
     assert len(keep) == 5
     assert keep_set(root, "") == set()
+
+
+def test_aliases_are_searchable():
+    node = ViewNode("android.view.View", text=None)
+    root = ViewNode("a.Root", children=[node])
+    assert find_matches(root, "button") == []
+    assert find_matches(root, "button", aliases={node: 'Button "OK"'}) == [node]
+    assert node in keep_set(root, "button", aliases={node: 'Button "OK"'})

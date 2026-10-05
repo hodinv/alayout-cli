@@ -13,8 +13,8 @@ from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
 from textual.widgets.tree import TreeNode
 
 from layoutcli.checks import run_checks
-from layoutcli.compose import infer_components
-from layoutcli.format import node_label, node_rows
+from layoutcli.compose import compose_nodes, infer_components
+from layoutcli.format import compose_kind, node_label, node_rows
 from layoutcli.model import Snapshot, ViewNode
 from layoutcli.screenshot import render_screenshot
 from layoutcli.search import find_matches, keep_set
@@ -117,6 +117,8 @@ class LayoutApp(App):
         self.selected: ViewNode | None = None
         self.issues = run_checks(snapshot)
         self.components = infer_components(snapshot.root)
+        self._compose = compose_nodes(snapshot.root)
+        self._aliases: dict[ViewNode, str] = {}
         self._warned = {i.node for i in self.issues if i.severity == "warning"}
         self._tree_nodes: dict[ViewNode, TreeNode[ViewNode]] = {}
         self._image = _load_image(snapshot, base_dir)
@@ -144,7 +146,7 @@ class LayoutApp(App):
         table.add_columns("severity", "check", "view", "message")
         for index, issue in enumerate(self.issues):
             table.add_row(Text(issue.severity), Text(issue.check),
-                          node_label(issue.node, component=self.components.get(issue.node)),
+                          self._plain_label(issue.node),
                           Text(issue.message), key=str(index))
         self._populate(None)
         self.query_one("#tree", Tree).focus()
@@ -153,7 +155,11 @@ class LayoutApp(App):
     # --- tree -----------------------------------------------------------------------------
 
     def _label(self, node: ViewNode) -> Text:
-        return node_label(node, warning=node in self._warned, component=self.components.get(node))
+        return node_label(node, warning=node in self._warned, component=self.components.get(node),
+                          in_compose=node in self._compose)
+
+    def _plain_label(self, node: ViewNode) -> Text:
+        return node_label(node, component=self.components.get(node), in_compose=node in self._compose)
 
     def _populate(self, keep: set[ViewNode] | None) -> None:
         tree = self.query_one("#tree", Tree)
@@ -184,7 +190,8 @@ class LayoutApp(App):
         component = self.components.get(node)
         for row in node_rows(node, self.snapshot.density, component):
             table.add_row(*(Text(cell) for cell in row))  # literal: app strings may contain [markup]
-        self.query_one("#wire", Wireframe).select(node, component.kind if component else None)
+        wire_label = compose_kind(node, component)[0] if node in self._compose else None
+        self.query_one("#wire", Wireframe).select(node, wire_label)
 
     def _jump(self, node: ViewNode) -> None:
         tree_node = self._tree_nodes.get(node)
@@ -213,14 +220,19 @@ class LayoutApp(App):
                 self._populate(None)
             self.sub_title = self._default_subtitle()
             return
-        matches = find_matches(self.snapshot.root, query)
+        matches = find_matches(self.snapshot.root, query, self._search_aliases())
         if not matches:  # keep the previous search, filter and tree
             self.notify(f"no matches for {query!r}", severity="warning")
             return
         self._query, self._matches, self._match_index = query, matches, -1
         if self._filtered:
-            self._populate(keep_set(self.snapshot.root, self._query))
+            self._populate(keep_set(self.snapshot.root, self._query, self._search_aliases()))
         self._step_match(1)
+
+    def _search_aliases(self) -> dict[ViewNode, str]:
+        if not self._aliases:
+            self._aliases = {node: self._plain_label(node).plain for node in self._compose}
+        return self._aliases
 
     def _default_subtitle(self) -> str:
         return self.snapshot.activity or self.snapshot.package or ""
@@ -245,7 +257,7 @@ class LayoutApp(App):
             self.notify("search first (/), then f filters the tree to the matches")
             return
         self._filtered = not self._filtered
-        self._populate(keep_set(self.snapshot.root, self._query) if self._filtered else None)
+        self._populate(keep_set(self.snapshot.root, self._query, self._search_aliases()) if self._filtered else None)
         if self.selected is not None and self.selected in self._tree_nodes:
             self.query_one("#tree", Tree).move_cursor(self._tree_nodes[self.selected])
 

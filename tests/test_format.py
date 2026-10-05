@@ -49,3 +49,24 @@ def test_node_rows_include_compose_section():
     assert rows[i + 1:i + 5] == [("compose", "component", "Clickable"), ("compose", "label", "Всегда"),
                                  ("compose", "state", "selected"), ("compose", "similar", "1 of 5")]
     assert rows[-1] == ("uiautomator", "clickable", "true")
+
+
+def test_compose_label_uses_component_kind_instead_of_class():
+    from layoutcli.compose import Component
+    node = ViewNode("android.view.View", bounds=Rect(48, 1846, 1032, 2016), sources=["uiautomator"])
+    assert node_label(node, component=Component("Button", "Продолжить", (), (1, 2)), in_compose=True).plain == \
+        'Button "Продолжить" 984x170 (1 of 2 similar)'
+    assert node_label(node, component=Component("Selector"), in_compose=True, warning=True).plain == \
+        "Selector 984x170 ⚠"
+
+
+def test_compose_label_for_plain_semantics_nodes():
+    text = ViewNode("android.widget.TextView", text="Всегда", bounds=Rect(0, 0, 154, 59), sources=["uiautomator"])
+    image = ViewNode("android.widget.ImageView", bounds=Rect(0, 0, 10, 10), sources=["uiautomator"],
+                     props={"uiautomator": {"content-desc": "Logo"}})
+    marker = ViewNode("android.widget.Button", bounds=Rect(0, 0, 984, 170), sources=["uiautomator"])
+    group = ViewNode("android.view.View", bounds=Rect(0, 0, 1080, 2167), sources=["uiautomator"])
+    assert node_label(text, in_compose=True).plain == 'Text "Всегда" 154x59'
+    assert node_label(image, in_compose=True).plain == 'Image "Logo" 10x10'
+    assert node_label(marker, in_compose=True).plain == "Button role 984x170"
+    assert node_label(group, in_compose=True).plain == "Group 1080x2167"

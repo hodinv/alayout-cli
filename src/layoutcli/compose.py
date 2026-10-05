@@ -97,10 +97,9 @@ def _shape(node: ViewNode) -> tuple:
     return (node.short_class, tuple(_shape(c) for c in node.children))
 
 
-def infer_components(root: ViewNode) -> dict[ViewNode, Component]:
-    """Component guesses for the semantics nodes inside Compose hosts (ComposeView / AndroidComposeView)."""
-    found: dict[ViewNode, Component] = {}
-    parents: dict[ViewNode, ViewNode] = {}
+def _region(root: ViewNode) -> list[tuple[ViewNode, tuple[ViewNode, ...]]]:
+    """Semantics nodes inside Compose hosts (ComposeView / AndroidComposeView), with their ancestors."""
+    found: list[tuple[ViewNode, tuple[ViewNode, ...]]] = []
 
     def walk(node: ViewNode, ancestors: tuple[ViewNode, ...], in_compose: bool) -> None:
         name = node.class_name
@@ -108,15 +107,28 @@ def infer_components(root: ViewNode) -> dict[ViewNode, Component]:
             return  # interop Views hosted by Compose are regular Views
         is_host = name.endswith("ComposeView")
         if in_compose and not is_host and "uiautomator" in node.props:
-            component = _classify(node, ancestors)
-            if component is not None:
-                found[node] = component
-                if ancestors:
-                    parents[node] = ancestors[-1]
+            found.append((node, ancestors))
         for child in node.children:
             walk(child, ancestors + (node,), in_compose or is_host)
 
     walk(root, (), False)
+    return found
+
+
+def compose_nodes(root: ViewNode) -> set[ViewNode]:
+    return {node for node, _ in _region(root)}
+
+
+def infer_components(root: ViewNode) -> dict[ViewNode, Component]:
+    """Component guesses for the semantics nodes inside Compose hosts."""
+    found: dict[ViewNode, Component] = {}
+    parents: dict[ViewNode, ViewNode] = {}
+    for node, ancestors in _region(root):
+        component = _classify(node, ancestors)
+        if component is not None:
+            found[node] = component
+            if ancestors:
+                parents[node] = ancestors[-1]
 
     groups: dict[tuple, list[ViewNode]] = defaultdict(list)
     for node, component in found.items():

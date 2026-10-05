@@ -86,3 +86,13 @@ def test_uiautomator_only_tree_uses_compose_view_class():
     compose_view = ViewNode("androidx.compose.ui.platform.ComposeView", children=[host])
     assert infer_components(ViewNode("android.widget.FrameLayout", children=[compose_view])) == {
         clickable: Component("Clickable", "Go")}
+
+
+def test_compose_nodes_region():
+    from layoutcli.compose import compose_nodes
+    root, rows, button, back, title, outside = screen()
+    region = compose_nodes(root)
+    assert button in region and button.children[1] in region and title in region
+    assert outside not in region and root not in region
+    host = next(n for n, _ in root.walk() if n.class_name.endswith("AndroidComposeView"))
+    assert host not in region

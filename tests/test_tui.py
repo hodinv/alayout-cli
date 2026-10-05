@@ -243,11 +243,23 @@ def test_compose_components_shown_in_tree_and_properties():
         tree = app.query_one("#tree", Tree)
         button = next(n for n in tree_nodes(tree.root)
                       if n.data is not None and n.data.class_name == "android.widget.Button")
-        assert '⟨Button "Click me"⟩' in str(button.label)
+        assert str(button.label) == 'Button "Click me" 358x126'
         tree.move_cursor(button)
         await pilot.pause()
         table = app.query_one("#props", DataTable)
         rows = [tuple(str(c) for c in table.get_row_at(i)) for i in range(table.row_count)]
         assert ("compose", "component", "Button") in rows
         assert "Button" in app.query_one("#wire").render().plain
+    run_app(views_snapshot(), scenario)
+
+
+def test_tree_shows_compose_nodes_by_kind_and_search_finds_them():
+    async def scenario(app, pilot):
+        tree = app.query_one("#tree", Tree)
+        labels = [str(n.label) for n in tree_nodes(tree.root)]
+        assert 'Button "Click me" 358x126' in labels
+        assert 'Text "Hello Compose" 458x60' in labels
+        await pilot.press("slash", *"Click", "space", *"me", "enter")  # alias 'Button "Click me"' matches first
+        await pilot.pause()
+        assert app.selected.class_name == "android.widget.Button" and app.selected.text is None
     run_app(views_snapshot(), scenario)

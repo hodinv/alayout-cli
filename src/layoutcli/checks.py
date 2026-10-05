@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from layoutcli.format import dp
+from layoutcli.model import Rect, Snapshot, ViewNode
+
+MAX_DEPTH = 10
+MIN_TOUCH_DP = 48
+
+
+@dataclass(eq=False)
+class Issue:
+    check: str
+    severity: str  # "warning" | "info"
+    node: ViewNode
+    message: str
+
+
+def is_clickable(node: ViewNode) -> bool:
+    if node.props.get("uiautomator", {}).get("clickable") == "true":
+        return True
+    flags = node.props.get("dumpsys", {}).get("flags", "")
+    return len(flags) > 6 and flags[6] == "C"
+
+
+def _has_area(r: Rect | None) -> bool:
+    return r is not None and r.width > 0 and r.height > 0
+
+
+def _overlap(a: Rect, b: Rect) -> bool:
+    return a.left < b.right and b.left < a.right and a.top < b.bottom and b.top < a.bottom
+
+
+def _has_text(node: ViewNode) -> bool:
+    return any(n.text or n.props.get("uiautomator", {}).get("content-desc") for n, _ in node.walk())
+
+
+def _name(node: ViewNode) -> str:
+    return node.short_class + (f"#{node.id}" if node.id else "")
+
+
+def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
+    issues: list[Issue] = []
+    screen = Rect(0, 0, snap.screen[0], snap.screen[1])
+    visible: list[tuple[ViewNode, tuple[ViewNode, ...]]] = []
+
+    def walk(node: ViewNode, depth: int, ancestors: tuple[ViewNode, ...], parent_visible: bool) -> None:
+        if not parent_visible or node.visibility == "gone":
+            return
+        if node.visibility == "invisible":
+            if _has_area(node.bounds):
+                issues.append(Issue("invisible-space", "info", node,
+                                    f"INVISIBLE but still takes {node.bounds.width}x{node.bounds.height}px; "
+                                    "use GONE if it should not reserve space"))
+            return
+        visible.append((node, ancestors))
+        if depth == max_depth + 1:
+            issues.append(Issue("deep-nesting", "info", node,
+                                f"nested {depth} levels deep (more than {max_depth}); consider flattening"))
+        for child in node.children:
+            walk(child, depth + 1, ancestors + (node,), True)
+
+    walk(snap.root, 0, (), True)
+
+    for node, ancestors in visible:
+        b = node.bounds
+        if b is None:
+            continue
+        if not _has_area(b):
+            if not node.children:
+                issues.append(Issue("zero-size", "info", node, "visible but has zero size"))
+            continue
+        if not _overlap(b, screen):
+            issues.append(Issue("off-screen", "warning", node, f"entirely outside the screen {screen}"))
+            continue
+        clickable = is_clickable(node)
+        if clickable and snap.density:
+            w, h = dp(b.width, snap.density), dp(b.height, snap.density)
+            if w < MIN_TOUCH_DP or h < MIN_TOUCH_DP:
+                issues.append(Issue("touch-target", "warning", node,
+                                    f"touch target {w}x{h}dp is smaller than {MIN_TOUCH_DP}x{MIN_TOUCH_DP}dp"))
+        ui = node.props.get("uiautomator")
+        if ui is not None and (clickable or "Image" in node.short_class) and not _has_text(node):
+            parent = ancestors[-1] if ancestors else None
+            labelled_by_parent = parent is not None and parent.bounds == b and _has_text(parent)
+            if not labelled_by_parent:
+                issues.append(Issue("missing-label", "warning", node,
+                                    "clickable or image view without text or content description"))
+
+    clickables = [(n, a) for n, a in visible
+                  if is_clickable(n) and _has_area(n.bounds) and _overlap(n.bounds, screen)]
+    for i, (a, a_anc) in enumerate(clickables):
+        for b, b_anc in clickables[i + 1:]:
+            if a in b_anc or b in a_anc:
+                continue
+            if _overlap(a.bounds, b.bounds):
+                issues.append(Issue("overlapping-clickables", "warning", b,
+                                    f"overlaps clickable {_name(a)} at {a.bounds}"))
+    return issues

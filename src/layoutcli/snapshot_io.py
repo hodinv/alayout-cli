@@ -39,3 +39,17 @@ def load_snapshot(path: Path) -> Snapshot:
         return Snapshot.from_dict(json.loads(file.read_text(encoding="utf-8")))
     except (ValueError, KeyError, TypeError, IndexError) as e:
         raise SnapshotError(f"cannot read {file}: {e}") from e
+
+
+def list_snapshots(base: Path) -> list[tuple[Path, Snapshot]]:
+    """Readable snapshot folders directly under `base`, newest capture first."""
+    if not base.is_dir():
+        return []
+    found = []
+    for folder in base.iterdir():
+        if (folder / SNAPSHOT_FILE).is_file():
+            try:
+                found.append((folder, load_snapshot(folder)))
+            except SnapshotError:
+                continue
+    return sorted(found, key=lambda item: (item[1].captured_at, item[0].name), reverse=True)

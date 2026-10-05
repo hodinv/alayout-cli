@@ -12,7 +12,7 @@ from layoutcli.adb import Adb, AdbError, find_adb
 from layoutcli.build import BuildError, build_snapshot
 from layoutcli.capture import capture_raw
 from layoutcli.model import Snapshot
-from layoutcli.snapshot_io import SnapshotError, load_snapshot, save_capture
+from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_capture
 from layoutcli.tui.app import LayoutApp
 
 app = typer.Typer(add_completion=False,
@@ -29,8 +29,29 @@ def _make_adb(adb_path: str | None, serial: str | None) -> Adb:
     return Adb.connect(find_adb(adb_path), serial)
 
 
+SNAPSHOTS_DIR = Path("layout-snapshots")
+
+
 def _default_out() -> Path:
-    return Path("layout-snapshots") / f"capture-{datetime.now():%Y%m%d-%H%M%S}"
+    return SNAPSHOTS_DIR / f"capture-{datetime.now():%Y%m%d-%H%M%S}"
+
+
+def _choose_snapshot() -> Path | None:
+    """Let the user pick a saved snapshot; None means capture a new one."""
+    snapshots = list_snapshots(SNAPSHOTS_DIR)
+    if not snapshots:
+        return None
+    for number, (folder, snap) in enumerate(snapshots, start=1):
+        console.print(f"  [bold]{number:>2}[/]  {escape(folder.name):<28} "
+                      f"{escape(snap.activity or snap.package or '?')}  [dim]{escape(snap.captured_at)}[/]")
+    console.print("   [bold]n[/]  new capture")
+    while True:
+        answer = typer.prompt("Snapshot", default="1").strip().lower()
+        if answer == "n":
+            return None
+        if answer.isdigit() and 1 <= int(answer) <= len(snapshots):
+            return snapshots[int(answer) - 1][0]
+        err_console.print(f"choose 1-{len(snapshots)} or n")
 
 
 def _print_summary(snap: Snapshot, out_dir: Path) -> None:
@@ -61,7 +82,11 @@ def _fail(error: Exception) -> typer.Exit:
 def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Capture and inspect Android app layouts."""
     if ctx.invoked_subcommand is None:
-        inspect(None, serial=serial, adb=adb)
+        try:
+            snap = load_snapshot(_capture(adb, serial, None))
+        except (AdbError, BuildError, SnapshotError) as e:
+            raise _fail(e)
+        LayoutApp(snap).run()
 
 
 @app.command()
@@ -77,11 +102,13 @@ def capture(serial: SerialOpt = None, adb: AdbOpt = None,
 
 @app.command()
 def inspect(snapshot_dir: Annotated[Optional[Path], typer.Argument(
-                help="Snapshot directory; captures a new one when omitted.")] = None,
+                help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
             serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Open a snapshot in the interactive inspector."""
     try:
-        directory = snapshot_dir if snapshot_dir is not None else _capture(adb, serial, None)
+        directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot()
+        if directory is None:
+            directory = _capture(adb, serial, None)
         snap = load_snapshot(directory)
     except (AdbError, BuildError, SnapshotError) as e:
         raise _fail(e)

@@ -94,3 +94,64 @@ def test_help_still_lists_commands():
     result = runner.invoke(cli.app, ["--help"])
     assert result.exit_code == 0
     assert "capture" in result.output and "inspect" in result.output
+
+
+def _saved(tmp_path, name, captured_at, activity):
+    snap = views_snapshot()
+    snap.captured_at = captured_at
+    snap.activity = activity
+    save_capture(views_raw(), snap, tmp_path / "layout-snapshots" / name)
+
+
+def test_inspect_without_dir_lists_snapshots_newest_first_and_opens_choice(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _saved(tmp_path, "capture-old", "2026-10-01T10:00:00+00:00", "com.a.Old")
+    _saved(tmp_path, "capture-new", "2026-10-05T10:00:00+00:00", "com.a.New")
+    opened = _record_app(monkeypatch)
+    result = runner.invoke(cli.app, ["inspect"], input="2\n")
+    assert result.exit_code == 0, result.output
+    assert result.output.index("capture-new") < result.output.index("capture-old")
+    assert opened[0].activity == "com.a.Old"
+
+
+def test_inspect_picker_defaults_to_newest(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _saved(tmp_path, "capture-old", "2026-10-01T10:00:00+00:00", "com.a.Old")
+    _saved(tmp_path, "capture-new", "2026-10-05T10:00:00+00:00", "com.a.New")
+    opened = _record_app(monkeypatch)
+    result = runner.invoke(cli.app, ["inspect"], input="\n")
+    assert result.exit_code == 0, result.output
+    assert opened[0].activity == "com.a.New"
+
+
+def test_inspect_picker_n_captures_new_snapshot(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _saved(tmp_path, "capture-old", "2026-10-01T10:00:00+00:00", "com.a.Old")
+    monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
+    opened = _record_app(monkeypatch)
+    result = runner.invoke(cli.app, ["inspect"], input="n\n")
+    assert result.exit_code == 0, result.output
+    assert opened[0].activity == "com.example.demo.MainActivity"
+    assert len(list((tmp_path / "layout-snapshots").iterdir())) == 2
+
+
+def test_inspect_picker_reasks_on_invalid_choice(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _saved(tmp_path, "capture-old", "2026-10-01T10:00:00+00:00", "com.a.Old")
+    opened = _record_app(monkeypatch)
+    result = runner.invoke(cli.app, ["inspect"], input="9\nx\n1\n")
+    assert result.exit_code == 0, result.output
+    assert opened[0].activity == "com.a.Old"
+
+
+def test_inspect_picker_skips_unreadable_folders(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _saved(tmp_path, "capture-ok", "2026-10-01T10:00:00+00:00", "com.a.Ok")
+    (tmp_path / "layout-snapshots" / "junk").mkdir()
+    (tmp_path / "layout-snapshots" / "broken").mkdir()
+    (tmp_path / "layout-snapshots" / "broken" / "snapshot.json").write_text("{", encoding="utf-8")
+    opened = _record_app(monkeypatch)
+    result = runner.invoke(cli.app, ["inspect"], input="1\n")
+    assert result.exit_code == 0, result.output
+    assert "junk" not in result.output and "broken" not in result.output
+    assert opened[0].activity == "com.a.Ok"

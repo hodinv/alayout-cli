@@ -11,7 +11,7 @@ Inspect the layout of a running Android app from the terminal: one-shot capture,
 
     layoutcli [-s SERIAL] [--adb PATH]                    # capture, then open the TUI on the new snapshot
     layoutcli capture [-s SERIAL] [--adb PATH] [-o DIR]   # save snapshot of the foreground screen
-    layoutcli inspect [DIR]                               # open TUI (captures first if DIR omitted)
+    layoutcli inspect [DIR]                               # open TUI; without DIR pick a saved snapshot (or n = new)
 
 Snapshots go to `layout-snapshots/capture-YYYYMMDD-HHMMSS` unless `-o` is given.
 

@@ -1,7 +1,8 @@
+import pytest
 from helpers import PNG_BYTES, FakeAdb, views_responses
 
 from layoutcli.adb import AdbError
-from layoutcli.capture import DUMP_PATH, capture_raw
+from layoutcli.capture import DUMP_PATH, capture_raw, pull_apk
 from layoutcli.parse.wm import parse_wm_density, parse_wm_size
 
 
@@ -57,3 +58,16 @@ def test_crlf_output_is_normalised():
     responses["dumpsys activity top"] = responses["dumpsys activity top"].replace(b"\n", b"\r\n")
     raw = capture_raw(FakeAdb(responses))
     assert "\r" not in raw.dumpsys_text
+
+
+def test_pull_apk_writes_base_apk(tmp_path):
+    responses = views_responses()
+    responses["pm path com.example.demo"] = b"package:/data/app/~~x==/com.example.demo-y==/base.apk\npackage:/data/app/~~x==/split_config.arm64_v8a.apk\n"
+    responses["cat /data/app/~~x==/com.example.demo-y==/base.apk"] = b"PK\x03\x04apk-bytes"
+    dest = pull_apk(FakeAdb(responses), "com.example.demo", tmp_path / "base.apk")
+    assert dest.read_bytes() == b"PK\x03\x04apk-bytes"
+
+
+def test_pull_apk_unknown_package(tmp_path):
+    with pytest.raises(AdbError, match="not installed"):
+        pull_apk(FakeAdb(views_responses()), "com.missing", tmp_path / "base.apk")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from layoutcli.adb import AdbError
@@ -70,3 +71,17 @@ def capture_raw(adb: DeviceShell) -> RawCapture:
     raw.uiautomator_xml = attempt("uiautomator", lambda: _dump_uiautomator(adb))
     raw.screenshot_png = attempt("screenshot", lambda: _screenshot(adb))
     return raw
+
+
+def pull_apk(adb: DeviceShell, package: str, dest: Path) -> Path:
+    """Copy the installed base APK of `package` from the device to `dest`."""
+    paths = [line[len("package:"):].strip() for line in _text(adb.exec_out(f"pm path {package}")).splitlines()
+             if line.startswith("package:")]
+    if not paths:
+        raise AdbError(f"package {package} is not installed on the device")
+    base = next((p for p in paths if p.endswith("/base.apk")), paths[0])
+    data = adb.exec_out(f"cat {base}", timeout=600.0)
+    if not data.startswith(b"PK"):
+        raise AdbError(f"could not read {base}")
+    dest.write_bytes(data)
+    return dest

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
@@ -10,13 +11,14 @@ from rich.console import Console
 from rich.markup import escape
 
 from layoutcli.adb import Adb, AdbError, find_adb
+from layoutcli.apk import ApkError, apply_index, build_index, find_aapt2
 from layoutcli.build import BuildError, build_snapshot
-from layoutcli.capture import capture_raw
+from layoutcli.capture import capture_raw, pull_apk
 from layoutcli.checks import run_checks
 from layoutcli.diff import diff_snapshots
 from layoutcli.format import node_label
 from layoutcli.model import Snapshot
-from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_capture
+from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_apk_index, save_capture
 from layoutcli.tui.app import LayoutApp
 
 app = typer.Typer(add_completion=False,
@@ -27,6 +29,8 @@ err_console = Console(stderr=True, soft_wrap=True)
 
 SerialOpt = Annotated[Optional[str], typer.Option("--serial", "-s", help="Device serial (see `adb devices`).")]
 AdbOpt = Annotated[Optional[str], typer.Option("--adb", help="Path to adb or its directory.")]
+ApkOpt = Annotated[Optional[str], typer.Option(
+    "--apk", help="Map view ids to layout XML: path to the app's APK, or 'device' to pull it (needs SDK build-tools).")]
 
 
 def _utf8_output() -> None:
@@ -70,9 +74,9 @@ def _choose_snapshot(title: str = "Snapshot") -> Path | None:
 
 
 def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None,
-                      title: str = "Snapshot") -> Path:
+                      title: str = "Snapshot", apk: str | None = None) -> Path:
     directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot(title)
-    return directory if directory is not None else _capture(adb, serial, None)
+    return directory if directory is not None else _capture(adb, serial, None, apk)
 
 
 def _print_summary(snap: Snapshot, out_dir: Path) -> None:
@@ -84,12 +88,32 @@ def _print_summary(snap: Snapshot, out_dir: Path) -> None:
     console.print(f"Saved to {escape(str(out_dir))}")
 
 
-def _capture(adb_path: str | None, serial: str | None, out: Path | None) -> Path:
+def _apk_index(adb: Adb, apk: str, package: str | None):
+    aapt2 = find_aapt2(getattr(adb, "adb_path", None))
+    if apk != "device":
+        return build_index(Path(apk), aapt2)
+    if not package:
+        raise ApkError("cannot pull the APK: package unknown")
+    with tempfile.TemporaryDirectory() as tmp:
+        return build_index(pull_apk(adb, package, Path(tmp) / "base.apk"), aapt2)
+
+
+def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: str | None = None) -> Path:
     adb = _make_adb(adb_path, serial)
     raw = capture_raw(adb)
     snap = build_snapshot(raw, captured_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    index = None
+    if apk:
+        try:
+            index = _apk_index(adb, apk, snap.package)
+            snap.capabilities["apk"] = f"ok ({apply_index(snap.root, index)} views mapped)"
+        except (ApkError, AdbError) as e:
+            index = None
+            snap.capabilities["apk"] = str(e)
     out_dir = out or _default_out()
     save_capture(raw, snap, out_dir)
+    if index is not None:
+        save_apk_index(index.restricted_to({n.id for n, _ in snap.root.walk() if n.id}), out_dir)
     _print_summary(snap, out_dir)
     return out_dir
 
@@ -100,12 +124,12 @@ def _fail(error: Exception) -> typer.Exit:
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None) -> None:
+def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None) -> None:
     """Capture and inspect Android app layouts."""
     _utf8_output()
     if ctx.invoked_subcommand is None:
         try:
-            directory = _capture(adb, serial, None)
+            directory = _capture(adb, serial, None, apk)
             snap = load_snapshot(directory)
         except (AdbError, BuildError, SnapshotError) as e:
             raise _fail(e)
@@ -113,12 +137,12 @@ def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None) -> No
 
 
 @app.command()
-def capture(serial: SerialOpt = None, adb: AdbOpt = None,
+def capture(serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
             out: Annotated[Optional[Path], typer.Option("--out", "-o", help="Snapshot directory.")] = None
             ) -> None:
     """Capture the foreground screen's layout into a snapshot directory."""
     try:
-        _capture(adb, serial, out)
+        _capture(adb, serial, out, apk)
     except (AdbError, BuildError) as e:
         raise _fail(e)
 
@@ -126,10 +150,10 @@ def capture(serial: SerialOpt = None, adb: AdbOpt = None,
 @app.command()
 def inspect(snapshot_dir: Annotated[Optional[Path], typer.Argument(
                 help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
-            serial: SerialOpt = None, adb: AdbOpt = None) -> None:
+            serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None) -> None:
     """Open a snapshot in the interactive inspector."""
     try:
-        directory = _resolve_snapshot(snapshot_dir, adb, serial)
+        directory = _resolve_snapshot(snapshot_dir, adb, serial, apk=apk)
         snap = load_snapshot(directory)
     except (AdbError, BuildError, SnapshotError) as e:
         raise _fail(e)

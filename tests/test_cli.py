@@ -8,7 +8,8 @@ from typer.testing import CliRunner
 
 from layoutcli import cli
 from layoutcli.adb import AdbError
-from layoutcli.snapshot_io import save_capture
+from layoutcli.apk import ApkError, ApkIndex
+from layoutcli.snapshot_io import load_apk_index, save_capture
 
 runner = CliRunner()
 
@@ -208,3 +209,33 @@ def test_diff_picks_missing_snapshots(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "First snapshot" in result.output and "Second snapshot" in result.output
     assert "capture-old" in result.output.splitlines()[-2] or "no differences" in result.output
+
+
+def test_capture_with_local_apk_maps_ids(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
+    monkeypatch.setattr(cli, "find_aapt2", lambda adb_path=None: tmp_path / "aapt2")
+    monkeypatch.setattr(cli, "build_index", lambda apk, aapt2: ApkIndex(
+        ids={"toolbar": ["res/layout/activity_main.xml"], "unused": ["res/layout/x.xml"]},
+        layouts={"res/layout/activity_main.xml": "<A/>", "res/layout/x.xml": "<X/>"}))
+    apk = tmp_path / "app.apk"
+    apk.write_bytes(b"PK")
+    out = tmp_path / "snap"
+    result = runner.invoke(cli.app, ["capture", "-o", str(out), "--apk", str(apk)])
+    assert result.exit_code == 0, result.output
+    assert "ok (1 views mapped)" in result.output
+    assert load_apk_index(out).to_dict() == {"ids": {"toolbar": ["res/layout/activity_main.xml"]},
+                                             "layouts": {"res/layout/activity_main.xml": "<A/>"}}
+
+
+def test_capture_apk_failure_is_not_fatal(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
+
+    def no_aapt2(adb_path=None):
+        raise ApkError("aapt2 not found (install Android SDK build-tools)")
+    monkeypatch.setattr(cli, "find_aapt2", no_aapt2)
+    apk = tmp_path / "app.apk"
+    apk.write_bytes(b"PK")
+    result = runner.invoke(cli.app, ["capture", "-o", str(tmp_path / "snap"), "--apk", str(apk)])
+    assert result.exit_code == 0, result.output
+    assert "aapt2 not found" in result.output
+    assert load_apk_index(tmp_path / "snap") is None

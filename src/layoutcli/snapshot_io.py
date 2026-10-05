@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from layoutcli.apk import ApkIndex
 from layoutcli.capture import RawCapture
 from layoutcli.model import Snapshot
 
 SNAPSHOT_FILE = "snapshot.json"
 SCREEN_FILE = "screen.png"
+APK_FILE = "apk.json"
 
 
 class SnapshotError(Exception):
@@ -53,3 +55,17 @@ def list_snapshots(base: Path) -> list[tuple[Path, Snapshot]]:
             except SnapshotError:
                 continue
     return sorted(found, key=lambda item: (item[1].captured_at, item[0].name), reverse=True)
+
+
+def save_apk_index(index: ApkIndex, out_dir: Path) -> None:
+    (out_dir / APK_FILE).write_text(json.dumps(index.to_dict(), indent=1, ensure_ascii=False), encoding="utf-8")
+
+
+def load_apk_index(directory: Path) -> ApkIndex | None:
+    file = directory / APK_FILE
+    if not file.is_file():
+        return None
+    try:
+        return ApkIndex.from_dict(json.loads(file.read_text(encoding="utf-8")))
+    except (ValueError, TypeError, AttributeError):
+        return None

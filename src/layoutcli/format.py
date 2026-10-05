@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rich.text import Text
 
 from layoutcli.model import Rect, ViewNode
+
+if TYPE_CHECKING:
+    from layoutcli.compose import Component
 
 
 def dp(px: int, density: int | None) -> int | None:
@@ -21,7 +26,7 @@ def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def node_label(node: ViewNode, warning: bool = False) -> Text:
+def node_label(node: ViewNode, warning: bool = False, component: Component | None = None) -> Text:
     label = Text(node.short_class, style="bold")
     if node.id:
         label.append(f" #{node.id}", style="cyan")
@@ -34,12 +39,15 @@ def node_label(node: ViewNode, warning: bool = False) -> Text:
         label.stylize("dim")
     if node.sources == ["uiautomator"]:
         label.append(" ◇", style="magenta")
+    if component is not None:
+        label.append(f" ⟨{component.describe()}⟩", style="bold cyan")
     if warning:
         label.append(" ⚠", style="yellow")
     return label
 
 
-def node_rows(node: ViewNode, density: int | None) -> list[tuple[str, str, str]]:
+def node_rows(node: ViewNode, density: int | None,
+              component: Component | None = None) -> list[tuple[str, str, str]]:
     rows = [("view", "class", node.class_name),
             ("view", "id", node.id or "—"),
             ("view", "visibility", node.visibility)]
@@ -49,6 +57,14 @@ def node_rows(node: ViewNode, density: int | None) -> list[tuple[str, str, str]]
     if node.text:
         rows.append(("view", "text", node.text))
     rows.append(("view", "sources", ", ".join(node.sources)))
+    if component is not None:
+        rows.append(("compose", "component", component.kind))
+        if component.label:
+            rows.append(("compose", "label", component.label))
+        if component.state:
+            rows.append(("compose", "state", ", ".join(component.state)))
+        if component.repeat:
+            rows.append(("compose", "similar", f"{component.repeat[0]} of {component.repeat[1]}"))
     for source in sorted(node.props):
         for key, value in node.props[source].items():
             rows.append((source, key, value))

@@ -236,3 +236,18 @@ def test_x_ignores_framework_id_even_if_apk_json_has_it(tmp_path):
         await pilot.pause()
         assert app.screen.__class__.__name__ != "LayoutXmlScreen"
     run_app(snap, scenario, base_dir=tmp_path)
+
+
+def test_compose_components_shown_in_tree_and_properties():
+    async def scenario(app, pilot):
+        tree = app.query_one("#tree", Tree)
+        button = next(n for n in tree_nodes(tree.root)
+                      if n.data is not None and n.data.class_name == "android.widget.Button")
+        assert '⟨Button "Click me"⟩' in str(button.label)
+        tree.move_cursor(button)
+        await pilot.pause()
+        table = app.query_one("#props", DataTable)
+        rows = [tuple(str(c) for c in table.get_row_at(i)) for i in range(table.row_count)]
+        assert ("compose", "component", "Button") in rows
+        assert "Button" in app.query_one("#wire").render().plain
+    run_app(views_snapshot(), scenario)

@@ -26,6 +26,10 @@ adb lookup order: `--adb`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`, `sdk.dir` in `loc
 Data sources: `dumpsys activity top` (real View tree, including GONE views), `uiautomator dump`
 (semantics incl. Compose), `screencap`. Missing sources are reported, not fatal.
 In the tree, `◇` marks nodes known only from uiautomator (e.g. Compose semantics).
+Inside Compose, nodes are tagged with the component they most likely are, inferred from semantics:
+`⟨Button "OK"⟩`, `⟨Clickable "Row text"⟩`, `⟨IconButton "Back"⟩`, `⟨Selector⟩`, `⟨Toggle … [checked]⟩`,
+`⟨TextField⟩`, `⟨Scrollable⟩`, with `(n of m similar)` for siblings of identical structure (likely the same
+composable). Composable names themselves are not available from semantics.
 
 TUI keys: arrows navigate the tree, `/` search (id, class, text, content-desc), `n`/`N` next/previous match,
 `f` filter the tree to matches, `p` switch wireframe/screenshot, `c` checks list (Enter jumps to the view), `x` layout XML of the view (with `--apk`), `q` quit.

@@ -66,7 +66,7 @@ class _Canvas:
 
 
 def render_wireframe(root: ViewNode, screen: tuple[int, int], cols: int, rows: int,
-                     selected: ViewNode | None = None) -> Text:
+                     selected: ViewNode | None = None, label: str | None = None) -> Text:
     sw, sh = screen
     if cols <= 0 or rows <= 0 or sw <= 0 or sh <= 0:
         return Text("")
@@ -76,5 +76,5 @@ def render_wireframe(root: ViewNode, screen: tuple[int, int], cols: int, rows: i
         if node is not selected and node.bounds is not None:
             canvas.box(node.bounds, FRAME_STYLE)
     if selected is not None and selected.bounds is not None:
-        canvas.box(selected.bounds, SELECTED_STYLE, label=selected.short_class)
+        canvas.box(selected.bounds, SELECTED_STYLE, label=label or selected.short_class)
     return canvas.to_text()

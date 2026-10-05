@@ -254,3 +254,10 @@ def test_diff_warns_when_snapshots_come_from_different_sources(tmp_path):
     assert result.exit_code == 0, result.output
     assert "different sources" in result.output
     assert 'class "' not in result.output
+
+
+def test_capture_summary_mentions_compose_components(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
+    result = runner.invoke(cli.app, ["capture", "-o", str(tmp_path / "s")])
+    assert result.exit_code == 0, result.output
+    assert "Compose UI: 1 component" in result.output

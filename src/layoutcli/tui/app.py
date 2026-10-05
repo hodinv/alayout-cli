@@ -13,6 +13,7 @@ from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
 from textual.widgets.tree import TreeNode
 
 from layoutcli.checks import run_checks
+from layoutcli.compose import infer_components
 from layoutcli.format import node_label, node_rows
 from layoutcli.model import Snapshot, ViewNode
 from layoutcli.screenshot import render_screenshot
@@ -39,10 +40,12 @@ class Wireframe(Widget):
         self.snapshot = snapshot
         self.image = image
         self.selected: ViewNode | None = None
+        self.selected_label: str | None = None
         self.mode = "wireframe"
 
-    def select(self, node: ViewNode | None) -> None:
+    def select(self, node: ViewNode | None, label: str | None = None) -> None:
         self.selected = node
+        self.selected_label = label
         self.refresh()
 
     def toggle_mode(self) -> None:
@@ -56,7 +59,7 @@ class Wireframe(Widget):
                 return Text("no screenshot in this snapshot (p: back to wireframe)", style="dim")
             return render_screenshot(self.image, self.snapshot.screen, size.width, size.height, self.selected)
         return render_wireframe(self.snapshot.root, self.snapshot.screen,
-                                size.width, size.height, self.selected)
+                                size.width, size.height, self.selected, self.selected_label)
 
 
 class LayoutXmlScreen(ModalScreen):
@@ -113,6 +116,7 @@ class LayoutApp(App):
         self.snapshot = snapshot
         self.selected: ViewNode | None = None
         self.issues = run_checks(snapshot)
+        self.components = infer_components(snapshot.root)
         self._warned = {i.node for i in self.issues if i.severity == "warning"}
         self._tree_nodes: dict[ViewNode, TreeNode[ViewNode]] = {}
         self._image = _load_image(snapshot, base_dir)
@@ -139,7 +143,8 @@ class LayoutApp(App):
         table = self.query_one("#issues", DataTable)
         table.add_columns("severity", "check", "view", "message")
         for index, issue in enumerate(self.issues):
-            table.add_row(Text(issue.severity), Text(issue.check), node_label(issue.node),
+            table.add_row(Text(issue.severity), Text(issue.check),
+                          node_label(issue.node, component=self.components.get(issue.node)),
                           Text(issue.message), key=str(index))
         self._populate(None)
         self.query_one("#tree", Tree).focus()
@@ -148,7 +153,7 @@ class LayoutApp(App):
     # --- tree -----------------------------------------------------------------------------
 
     def _label(self, node: ViewNode) -> Text:
-        return node_label(node, warning=node in self._warned)
+        return node_label(node, warning=node in self._warned, component=self.components.get(node))
 
     def _populate(self, keep: set[ViewNode] | None) -> None:
         tree = self.query_one("#tree", Tree)
@@ -176,9 +181,10 @@ class LayoutApp(App):
         self.selected = node
         table = self.query_one("#props", DataTable)
         table.clear()
-        for row in node_rows(node, self.snapshot.density):
+        component = self.components.get(node)
+        for row in node_rows(node, self.snapshot.density, component):
             table.add_row(*(Text(cell) for cell in row))  # literal: app strings may contain [markup]
-        self.query_one("#wire", Wireframe).select(node)
+        self.query_one("#wire", Wireframe).select(node, component.kind if component else None)
 
     def _jump(self, node: ViewNode) -> None:
         tree_node = self._tree_nodes.get(node)

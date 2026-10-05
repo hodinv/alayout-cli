@@ -47,3 +47,9 @@ def test_degenerate_canvas_is_empty():
     root, _ = screen_tree()
     assert render_wireframe(root, (100, 200), 0, 10).plain == ""
     assert render_wireframe(root, (0, 0), 10, 10).plain == ""
+
+
+def test_selected_box_uses_given_label():
+    root, child = screen_tree()
+    out = lines(render_wireframe(root, (100, 200), 10, 10, selected=child, label="Btn"))
+    assert out[0] == "┌Btn┐────┐"

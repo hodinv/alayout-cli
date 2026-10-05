@@ -15,6 +15,7 @@ from layoutcli.apk import ApkError, apply_index, build_index, find_aapt2
 from layoutcli.build import BuildError, build_snapshot
 from layoutcli.capture import capture_raw, pull_apk
 from layoutcli.checks import run_checks
+from layoutcli.compose import infer_components
 from layoutcli.diff import diff_snapshots
 from layoutcli.format import node_label
 from layoutcli.model import Snapshot
@@ -85,6 +86,9 @@ def _print_summary(snap: Snapshot, out_dir: Path) -> None:
     for source, status in snap.capabilities.items():
         style = "green" if status == "ok" else "yellow"
         console.print(f"  {source:<12} [{style}]{escape(status)}[/]")
+    components = len(infer_components(snap.root))
+    if components:
+        console.print(f"Compose UI: {components} component{'' if components == 1 else 's'} inferred from semantics")
     console.print(f"Saved to {escape(str(out_dir))}")
 
 
@@ -170,13 +174,14 @@ def check(snapshot_dir: Annotated[Optional[Path], typer.Argument(
     except (AdbError, BuildError, SnapshotError) as e:
         raise _fail(e)
     issues = run_checks(snap)
+    components = infer_components(snap.root)
     warnings = sum(1 for i in issues if i.severity == "warning")
     console.print(f"{warnings} warning{'' if warnings == 1 else 's'}, {len(issues) - warnings} info in "
                   f"{escape(snap.activity or snap.package or 'unknown app')}")
     for issue in sorted(issues, key=lambda i: (i.severity != "warning", i.check)):
         style = "yellow" if issue.severity == "warning" else "dim"
         console.print(f"  [{style}]{issue.severity:<7}[/] {issue.check:<22} "
-                      f"{escape(node_label(issue.node, warning=issue.severity == 'warning').plain)}  "
+                      f"{escape(node_label(issue.node, warning=issue.severity == 'warning', component=components.get(issue.node)).plain)}  "
                       f"{escape(issue.message)}")
 
 

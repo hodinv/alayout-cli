@@ -122,3 +122,13 @@ def test_views_without_ids_match_by_position():
 def test_pick_window_rejects_foreign_package():
     other = ViewNode("a.A", props={"uiautomator": {"package": "com.android.permissioncontroller"}})
     assert pick_window([other], "com.app") is None
+
+
+def test_root_keeps_full_size_when_uiautomator_window_is_clipped():
+    content = DNode("android.widget.LinearLayout", "2", "V.E...... ........", Rect(0, 0, 100, 200))
+    droot = DNode("DecorView", "1", children=[content])
+    u_root = _u("android.widget.FrameLayout", Rect(0, 0, 100, 180),
+                children=[_u("android.widget.LinearLayout", Rect(0, 0, 100, 180))])
+    merged = merge(DumpsysResult("p", "p.A", droot), [u_root])
+    assert merged.bounds == Rect(0, 0, 100, 200)
+    assert merged.children[0].bounds == Rect(0, 0, 100, 200)

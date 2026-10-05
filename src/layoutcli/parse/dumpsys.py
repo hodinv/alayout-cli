@@ -38,10 +38,27 @@ class DumpsysResult:
     package: str | None
     activity: str | None
     root: DNode
+    resumed: bool = True  # False when no activity was resumed (e.g. lock screen) and we fell back
 
 
 def _indent(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
+
+
+def _ends_hierarchy(line: str, header_indent: int) -> bool:
+    """The View Hierarchy section ends at the next section at its own level or a new block.
+
+    Lines indented less than the header that are not a new ACTIVITY/TASK block are
+    continuations of custom multi-line View.toString() output (e.g. MIUI launcher).
+    """
+    if not line.strip():
+        return False
+    indent = _indent(line)
+    if indent == header_indent:
+        return True
+    if indent < header_indent:
+        return bool(_ACTIVITY_RE.match(line)) or line.startswith("TASK ")
+    return False
 
 
 def _split_component(comp: str) -> tuple[str | None, str | None]:
@@ -108,7 +125,7 @@ def parse_dumpsys(text: str) -> DumpsysResult | None:
                 header = _indent(line)
                 j = i + 1
                 body = []
-                while j < len(lines) and (not lines[j].strip() or _indent(lines[j]) > header):
+                while j < len(lines) and not _ends_hierarchy(lines[j], header):
                     if lines[j].strip():
                         body.append(lines[j])
                     j += 1
@@ -121,4 +138,4 @@ def parse_dumpsys(text: str) -> DumpsysResult | None:
         return None
     chosen = next((b for b in with_root if b["resumed"]), with_root[-1])
     package, activity = _split_component(chosen["comp"])
-    return DumpsysResult(package, activity, chosen["root"])
+    return DumpsysResult(package, activity, chosen["root"], resumed=chosen["resumed"])

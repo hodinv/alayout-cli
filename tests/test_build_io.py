@@ -125,3 +125,20 @@ def test_landscape_swaps_wm_size():
     raw.dumpsys_text = None
     raw.uiautomator_xml = _window_xml("com.example.demo", "[0,0][2400,1080]", rotation=1)
     assert build_snapshot(raw, AT).screen == (2400, 1080)
+
+
+def test_no_resumed_activity_is_reported():
+    raw = views_raw()
+    raw.dumpsys_text = raw.dumpsys_text.replace("mResumed=true", "mResumed=false")
+    snap = build_snapshot(raw, AT)
+    assert snap.capabilities["dumpsys"].startswith("no resumed activity")
+    assert "com.example.demo.MainActivity" in snap.capabilities["dumpsys"]
+
+
+def test_window_clipped_above_navigation_bar_is_still_merged():
+    # edge-to-edge apps: dumpsys decor is 1080x2400, uiautomator clips the window to 2167
+    raw = views_raw()
+    raw.uiautomator_xml = raw.uiautomator_xml.replace("[0,0][1080,2400]", "[0,0][1080,2167]")
+    snap = build_snapshot(raw, AT)
+    assert snap.capabilities["uiautomator"] == "ok"
+    assert find_by_id(snap.root, "toolbar").sources == ["dumpsys", "uiautomator"]

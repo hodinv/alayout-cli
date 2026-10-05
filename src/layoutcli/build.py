@@ -20,7 +20,12 @@ def build_snapshot(raw: RawCapture, captured_at: str) -> Snapshot:
     caps: dict[str, str] = {}
 
     dump = parse_dumpsys(raw.dumpsys_text) if raw.dumpsys_text else None
-    caps["dumpsys"] = "ok" if dump else raw.errors.get("dumpsys", "no activity view hierarchy found")
+    if dump is None:
+        caps["dumpsys"] = raw.errors.get("dumpsys", "no activity view hierarchy found")
+    elif not dump.resumed:
+        caps["dumpsys"] = f"no resumed activity (screen locked?); showing {dump.activity or dump.package}"
+    else:
+        caps["dumpsys"] = "ok"
 
     ui_roots = []
     if raw.uiautomator_xml:

@@ -18,7 +18,7 @@ from layoutcli.tui.app import LayoutApp
 app = typer.Typer(add_completion=False,
                   help="Capture and inspect Android app layouts. "
                        "Without a command: capture, then open the inspector.")
-console = Console(soft_wrap=True)
+console = Console(soft_wrap=True, highlight=False)
 err_console = Console(stderr=True, soft_wrap=True)
 
 SerialOpt = Annotated[Optional[str], typer.Option("--serial", "-s", help="Device serial (see `adb devices`).")]

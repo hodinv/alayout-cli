@@ -71,3 +71,41 @@ def test_falls_back_to_last_activity_with_hierarchy():
 def test_returns_none_without_view_hierarchy():
     assert parse_dumpsys("TASK 1 id=1\n  ACTIVITY a/.B 1 pid=2\n") is None
     assert parse_dumpsys("") is None
+
+
+def test_custom_multiline_tostring_does_not_end_hierarchy():
+    # MIUI launcher views override toString() with multi-line text that starts at column 0
+    text = (
+        "  ACTIVITY com.mi.android.globallauncher/com.miui.home.launcher.Launcher 6ed639 pid=2869\n"
+        "    Local Activity 1 State:\n"
+        "      mResumed=true\n"
+        "    View Hierarchy:\n"
+        "      DecorView@9e64938[Launcher]\n"
+        "        com.miui.home.launcher.CellScreen{409136f V.E...... ......ID 0,60-1080,2258}\n"
+        "          [ mHCells = 5 mVCells = 6 childCount = 1   \n"
+        "{ tag 0 = com.miui.home.launcher.ShortcutIcon{23d778b VFE...CL. .......D 42,1291-241,1596}(Gallery) }\n"
+        "OccupiedCells:\n"
+        "\t[\t2\t2\t]\n"
+        " ]\n"
+        "          com.miui.home.launcher.ShortcutIcon{23d778b VFE...CL. .......D 42,1291-241,1596}(Gallery)\n"
+        "            android.widget.TextView{1 V.ED..... ........ 0,0-199,50 #7f0a0001 app:id/icon_title}\n"
+        "    Local FragmentActivity 5c90246 State:\n"
+        "      mCreated=true\n"
+    )
+    r = parse_dumpsys(text)
+    cell = r.root.children[0]
+    assert cell.class_name == "com.miui.home.launcher.CellScreen"
+    (icon,) = cell.children
+    assert icon.class_name == "com.miui.home.launcher.ShortcutIcon"
+    assert icon.clickable is True
+    assert icon.children[0].res_id == "app:id/icon_title"
+    assert len(list(all_nodes(r.root))) == 4
+
+
+def test_next_activity_block_still_ends_hierarchy():
+    text = (block("com.a/.One", True, ["DecorView@1[One]", "{ junk at column zero }"]) +
+            block("com.b/.Two", False, ["DecorView@2[Two]", "  android.view.View{3 V.ED..... ........ 0,0-1,1}"]))
+    r = parse_dumpsys(text)
+    assert r.activity == "com.a.One"
+    assert r.root.children == []
+    assert r.resumed is True

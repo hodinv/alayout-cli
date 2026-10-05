@@ -36,10 +36,21 @@ def select_window(ui_roots: list[ViewNode], dump: DumpsysResult | None
         found = ", ".join(sorted({r.props.get("uiautomator", {}).get("package", "?") for r in ui_roots}))
         return None, f"active window is {found or 'unknown'}, not {dump.package}; using dumpsys only"
     extent = _children_extent(dump.root)
-    if window.bounds is not None and extent.width > 0 and window.bounds.size != extent.size:
+    if window.bounds is not None and extent.width > 0 and not _covers_activity(window.bounds, extent):
         return None, (f"active window {window.bounds} does not match the activity "
                       f"({extent.width}x{extent.height}), probably a dialog; using dumpsys only")
     return window, None
+
+
+MIN_WINDOW_COVERAGE = 0.75
+
+
+def _covers_activity(window: Rect, extent: Rect) -> bool:
+    """uiautomator clips the window to the visible area (e.g. above the navigation bar of an
+    edge-to-edge app), so accept a window that fits inside the activity and covers most of it."""
+    fits = window.width <= extent.width and window.height <= extent.height
+    coverage = (window.width * window.height) / (extent.width * extent.height) if extent.height else 0
+    return fits and coverage >= MIN_WINDOW_COVERAGE
 
 
 def merge(dump: DumpsysResult | None, ui_roots: list[ViewNode]) -> ViewNode:
@@ -106,10 +117,12 @@ def _dumpsys_props(dn: DNode) -> dict[str, str]:
 def _convert(dn: DNode, un: ViewNode | None, origin: tuple[int, int]) -> ViewNode:
     if dn.rel is not None:
         bounds = dn.rel.offset(*origin)
+    elif _children_extent(dn).width > 0:
+        bounds = _children_extent(dn).offset(*origin)  # root: uiautomator bounds may be clipped
     elif un is not None and un.bounds is not None:
         bounds = un.bounds
     else:
-        bounds = _children_extent(dn).offset(*origin)
+        bounds = Rect(*origin, *origin)
     if un is not None and un.bounds is not None and un.bounds.size == bounds.size:
         bounds = un.bounds  # uiautomator knows scroll offsets; dumpsys does not
 

@@ -14,6 +14,7 @@ Inspect the layout of a running Android app from the terminal: one-shot capture,
     layoutcli inspect [DIR]                               # open TUI; without DIR pick a saved snapshot (or n = new)
     layoutcli check [DIR]                                 # report layout problems (touch targets, labels, overlaps...)
     layoutcli diff [A] [B]                                # views added/removed/changed between two snapshots
+    layoutcli composables [--apk PATH] [--all] [--previews] # the app's composable functions (debug APK)
 
 `--apk PATH` or `--apk device` (on `layoutcli`, `capture`, `inspect`) maps view ids to the layout XML files
 that declare them; needs Android SDK build-tools (aapt2). The APK itself is not stored, only `apk.json`.
@@ -29,7 +30,8 @@ In the tree, `◇` marks nodes known only from uiautomator (e.g. Compose semanti
 Inside Compose, nodes are tagged with the component they most likely are, inferred from semantics:
 `⟨Button "OK"⟩`, `⟨Clickable "Row text"⟩`, `⟨IconButton "Back"⟩`, `⟨Selector⟩`, `⟨Toggle … [checked]⟩`,
 `⟨TextField⟩`, `⟨Scrollable⟩`, with `(n of m similar)` for siblings of identical structure (likely the same
-composable). Composable names themselves are not available from semantics.
+composable). Real composable names are not available from semantics; `layoutcli composables` lists the app's
+composables (name, file, approximate line) from the Compose source information kept in debug APKs, as a reference.
 
 TUI keys: arrows navigate the tree, `/` search (id, class, text, content-desc), `n`/`N` next/previous match,
 `f` filter the tree to matches, `p` switch wireframe/screenshot, `c` checks list (Enter jumps to the view), `x` layout XML of the view (with `--apk`), `q` quit.

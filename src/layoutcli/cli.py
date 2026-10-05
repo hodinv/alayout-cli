@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
@@ -15,10 +16,12 @@ from layoutcli.apk import ApkError, apply_index, build_index, find_aapt2
 from layoutcli.build import BuildError, build_snapshot
 from layoutcli.capture import capture_raw, pull_apk
 from layoutcli.checks import run_checks
+from layoutcli.composables import app_composables, list_composables
 from layoutcli.compose import compose_nodes, infer_components
 from layoutcli.diff import diff_snapshots
 from layoutcli.format import node_label
 from layoutcli.model import Snapshot
+from layoutcli.parse.dumpsys import parse_dumpsys
 from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_apk_index, save_capture
 from layoutcli.tui.app import LayoutApp
 
@@ -224,3 +227,43 @@ def diff(first: Annotated[Optional[Path], typer.Argument(help="Older snapshot (p
         parts = "; ".join(f"{k} {_quote(old)} -> {_quote(new)}" for k, (old, new) in change.fields.items())
         console.print(f"[yellow]~ {escape(change.path)}[/]  {escape(parts)}")
     console.print(f"{len(result.added)} added, {len(result.removed)} removed, {len(result.changed)} changed")
+
+
+@app.command()
+def composables(apk: ApkOpt = None,
+                show_all: Annotated[bool, typer.Option("--all", help="Include library composables.")] = False,
+                previews: Annotated[bool, typer.Option("--previews", help="Include @Preview functions.")] = False,
+                serial: SerialOpt = None, adb: AdbOpt = None) -> None:
+    """List the app's composable functions found in its (debug) APK. Without --apk: the foreground app."""
+    package = None
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            if apk and apk != "device":
+                apk_path = Path(apk)
+            else:
+                device = _make_adb(adb, serial)
+                top = parse_dumpsys(device.exec_out("dumpsys activity top").decode("utf-8", "replace"))
+                if top is None or not top.package:
+                    raise AdbError("no foreground app found; open the app or pass --apk PATH")
+                package = top.package
+                apk_path = pull_apk(device, package, Path(tmp) / "base.apk")
+            items = list_composables(apk_path)
+    except (AdbError, OSError, zipfile.BadZipFile) as e:
+        raise _fail(e)
+    shown = items if show_all else app_composables(items, package)
+    if not previews:
+        shown = [c for c in shown if not c.preview]
+    if not shown:
+        console.print("no composables found (release/minified builds drop Compose source information)")
+        return
+    files: dict[tuple[str, str], list] = {}
+    for c in shown:
+        files.setdefault((c.package or "?", c.file), []).append(c)
+    console.print(f"{len(shown)} composables in {len(files)} files"
+                  + (f" ({escape(package)})" if package else "")
+                  + ("" if previews else ", previews hidden (--previews)"))
+    for (pkg, file), group in files.items():
+        console.print(f"  [bold]{escape(file)}[/]  [dim]{escape(pkg)}[/]")
+        for c in group:
+            where = f"~{c.line}" if c.line else ""
+            console.print(f"    {escape(c.name):<40} [dim]{where}[/]")

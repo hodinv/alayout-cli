@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Mapping
 
 from PIL import Image
 from rich.text import Text
@@ -40,13 +42,29 @@ def _load_image(snapshot: Snapshot, base_dir: Path | None) -> tuple[Image.Image 
         return None, f"cannot read the screenshot {snapshot.screenshot}: {e}"
 
 
-def open_file(path: Path) -> None:
-    """Show a file in the system's default viewer."""
+def open_file(path: Path, env: Mapping[str, str] | None = None) -> None:
+    """Show a file in the system's default viewer; OSError when there is no way to show it."""
+    env = os.environ if env is None else env
     if sys.platform == "win32":
         os.startfile(path)  # type: ignore[attr-defined]
+        return
+    if sys.platform == "darwin":
+        opener = "open"
     else:
-        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not (env.get("DISPLAY") or env.get("WAYLAND_DISPLAY")):
+            raise OSError("no desktop session (DISPLAY/WAYLAND_DISPLAY unset), e.g. over SSH")
+        opener = "xdg-open"
+    if shutil.which(opener) is None:
+        raise OSError(f"{opener} not found")
+    subprocess.Popen([opener, str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def limited_colors(env: Mapping[str, str] | None = None) -> bool:
+    """Terminals known to lack 24-bit colour, where the half-block screenshot looks coarse."""
+    env = os.environ if env is None else env
+    if env.get("COLORTERM") in ("truecolor", "24bit"):
+        return False
+    return env.get("TERM_PROGRAM") == "Apple_Terminal" or env.get("TERM") == "linux"
 
 
 class ScreenshotView(Widget):
@@ -205,6 +223,7 @@ class LayoutApp(App):
         self._matches: list[ViewNode] = []
         self._match_index = -1
         self._filtered = False
+        self._color_hint_shown = False
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -342,7 +361,16 @@ class LayoutApp(App):
     # --- preview & checks -------------------------------------------------------------------
 
     def action_preview(self) -> None:
-        self.query_one("#wire", Wireframe).toggle_mode()
+        wire = self.query_one("#wire", Wireframe)
+        wire.toggle_mode()
+        if wire.mode == "screenshot" and self._image is not None:
+            self._color_hint()
+
+    def _color_hint(self) -> None:
+        if not self._color_hint_shown and limited_colors():
+            self._color_hint_shown = True
+            self.notify("this terminal has no 24-bit colour, so the screenshot looks coarse; "
+                        "press o for the real PNG (or use iTerm2, WezTerm, kitty, Ghostty)", timeout=8)
 
     def action_checks(self) -> None:
         issues = self.query_one("#issues", DataTable)
@@ -369,6 +397,7 @@ class LayoutApp(App):
             self.notify(self._image_note, severity="warning")
             return
         self.push_screen(ScreenshotScreen(self._image, self.snapshot.screen, self.selected, self._selected_title()))
+        self._color_hint()
 
     def action_open_screenshot(self) -> None:
         if self._image is None:
@@ -377,9 +406,14 @@ class LayoutApp(App):
         try:
             with tempfile.NamedTemporaryFile(prefix="layoutcli-", suffix=".png", delete=False) as f:
                 annotate(self._image, self.snapshot.screen, self.selected).save(f, format="PNG")
+        except OSError as e:
+            self.notify(f"cannot save the screenshot: {e}", severity="error")
+            return
+        try:
             open_file(Path(f.name))
         except OSError as e:
-            self.notify(f"cannot open the screenshot: {e}", severity="error")
+            self.notify(f"cannot open an image viewer: {e}; the PNG is saved as {f.name}",
+                        severity="warning", timeout=15)
             return
         self.notify(f"opened {f.name}")
 

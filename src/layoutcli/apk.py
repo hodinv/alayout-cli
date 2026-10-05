@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 from xml.sax.saxutils import quoteattr
 
+from layoutcli.adb import _default_sdk_dirs, sdk_dir_from_local_properties
 from layoutcli.model import ViewNode
 
 AAPT2_NAME = "aapt2.exe" if os.name == "nt" else "aapt2"
@@ -30,16 +31,19 @@ def _version_key(path: Path) -> tuple:
     return tuple(int(p) if p.isdigit() else -1 for p in re.split(r"[.-]", path.parent.name))
 
 
-def find_aapt2(adb_path: Path | None = None, env: Mapping[str, str] | None = None) -> Path:
+def find_aapt2(adb_path: Path | None = None, env: Mapping[str, str] | None = None,
+               cwd: Path | None = None) -> Path:
     env = os.environ if env is None else env
     sdks: list[Path] = []
     if adb_path is not None:
-        sdks.append(Path(adb_path).parent.parent)
+        sdks.append(Path(adb_path).resolve().parent.parent)  # adb from the SDK's platform-tools
     for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
         if env.get(var):
             sdks.append(Path(env[var]))
-    if env.get("LOCALAPPDATA"):
-        sdks.append(Path(env["LOCALAPPDATA"]) / "Android" / "Sdk")
+    local = sdk_dir_from_local_properties(Path.cwd() if cwd is None else cwd)
+    if local:
+        sdks.append(local)
+    sdks += _default_sdk_dirs(env)  # adb may come from Homebrew or a Linux package instead
     for sdk in sdks:
         found = sorted((sdk / "build-tools").glob(f"*/{AAPT2_NAME}"), key=_version_key, reverse=True)
         if found:

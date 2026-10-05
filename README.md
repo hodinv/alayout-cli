@@ -18,6 +18,7 @@ Inspect the layout of a running Android app from the terminal: one-shot capture,
 
 `--apk PATH` or `--apk device` (on `layoutcli`, `capture`, `inspect`) maps view ids to the layout XML files
 that declare them; needs Android SDK build-tools (aapt2). The APK itself is not stored, only `apk.json`. Options may also go before the command (`layoutcli --apk device capture`); for an existing snapshot `--apk` is ignored.
+aapt2 is looked up next to adb, in `ANDROID_HOME`/`ANDROID_SDK_ROOT`, the project's `local.properties` and the default SDK folder (Windows `%LOCALAPPDATA%AndroidSdk`, macOS `~/Library/Android/sdk`, Linux `~/Android/Sdk`).
 
 Snapshots go to `layout-snapshots/capture-YYYYMMDD-HHMMSS` unless `-o` is given.
 
@@ -36,3 +37,10 @@ composables (name, file, approximate line) from the Compose source information k
 TUI keys: arrows navigate the tree, `/` search (id, class, text, content-desc), `n`/`N` next/previous match,
 `f` filter the tree to matches, `p` switch wireframe/screenshot, `s` full-screen screenshot, `o` open the real PNG in the system image viewer (selected view outlined, the rest dimmed), `c` checks list (Enter jumps to the view), `x` layout XML of the view (with `--apk`), `q` quit.
 Views with warnings are marked `⚠`.
+
+## Platforms
+
+Windows, macOS and Linux. The screenshot preview needs a 24-bit colour terminal (Windows Terminal, iTerm2,
+WezTerm, kitty, Ghostty, GNOME Terminal...); macOS Terminal.app only has 256 colours, so use `o` there to open
+the real PNG. `o` uses the default image viewer (`open` on macOS, `xdg-open` on Linux); without a desktop
+session (e.g. over SSH) it reports where the annotated PNG was saved instead.

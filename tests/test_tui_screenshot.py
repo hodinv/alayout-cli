@@ -148,3 +148,48 @@ def test_x_shows_every_layout_with_the_id_and_scrolls_to_it(tmp_path):
         assert "res/layout/a.xml" in screen.body.plain and "res/layout-land/a.xml" in screen.body.plain
         assert screen.query_one("#xml").scroll_y > 0
     run_app(snap, scenario, base_dir=tmp_path)
+
+
+def test_open_file_without_desktop_on_linux_is_an_error(monkeypatch, tmp_path):
+    import pytest
+    monkeypatch.setattr(tui_app.sys, "platform", "linux")
+    with pytest.raises(OSError, match="no desktop"):
+        tui_app.open_file(tmp_path / "x.png", env={})
+    monkeypatch.setattr(tui_app.shutil, "which", lambda name: None)
+    with pytest.raises(OSError, match="xdg-open"):
+        tui_app.open_file(tmp_path / "x.png", env={"DISPLAY": ":0"})
+
+
+def test_failed_open_reports_where_the_png_was_saved(tmp_path, monkeypatch):
+    snap = snapshot_with_png(tmp_path)
+    notes = []
+
+    def fail(path):
+        raise OSError("no desktop session")
+    monkeypatch.setattr(tui_app, "open_file", fail)
+
+    async def scenario(app, pilot):
+        app.notify = lambda message, **kw: notes.append(message)
+        await pilot.press("o")
+        await pilot.pause()
+        assert "no desktop session" in notes[0] and ".png" in notes[0]
+    run_app(snap, scenario, base_dir=tmp_path)
+
+
+def test_limited_colour_terminals_are_detected():
+    assert tui_app.limited_colors({"TERM_PROGRAM": "Apple_Terminal"})
+    assert not tui_app.limited_colors({"TERM_PROGRAM": "iTerm.app", "COLORTERM": "truecolor"})
+    assert not tui_app.limited_colors({})
+
+
+def test_screenshot_in_limited_terminal_suggests_o(tmp_path, monkeypatch):
+    snap = snapshot_with_png(tmp_path)
+    monkeypatch.setattr(tui_app, "limited_colors", lambda env=None: True)
+    notes = []
+
+    async def scenario(app, pilot):
+        app.notify = lambda message, **kw: notes.append(message)
+        await pilot.press("p", "p", "p")
+        await pilot.pause()
+        assert len(notes) == 1 and "o" in notes[0] and "colour" in notes[0]
+    run_app(snap, scenario, base_dir=tmp_path)

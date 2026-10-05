@@ -24,12 +24,12 @@ def make_build_tools(sdk: Path, *versions: str) -> dict[str, Path]:
 def test_find_aapt2_prefers_highest_version_next_to_adb(tmp_path):
     made = make_build_tools(tmp_path / "sdk", "34.0.0", "36.0.0", "9.0.0")
     adb = tmp_path / "sdk" / "platform-tools" / "adb.exe"
-    assert find_aapt2(adb, env={}) == made["36.0.0"]
+    assert find_aapt2(adb, env={}, cwd=tmp_path) == made["36.0.0"]
 
 
 def test_find_aapt2_missing_raises(tmp_path):
     with pytest.raises(ApkError, match="aapt2 not found"):
-        find_aapt2(tmp_path / "nosdk" / "platform-tools" / "adb.exe", env={})
+        find_aapt2(tmp_path / "nosdk" / "platform-tools" / "adb.exe", env={}, cwd=tmp_path)
 
 
 def test_parse_resources_dump():
@@ -105,3 +105,19 @@ def test_framework_ids_are_not_mapped_to_app_layouts():
     assert apply_index(root, index) == 1
     assert "apk" not in framework.props and "apk" not in from_ui.props
     assert app_view.props["apk"] == {"layouts": "res/layout/activity_main.xml"}
+
+
+def test_find_aapt2_uses_local_properties_when_adb_is_not_in_an_sdk(tmp_path):
+    made = make_build_tools(tmp_path / "sdk", "35.0.0")
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "local.properties").write_text(f"sdk.dir={(tmp_path / 'sdk').as_posix()}\n", encoding="utf-8")
+    assert find_aapt2(Path("/usr/bin/adb"), env={}, cwd=project) == made["35.0.0"]
+
+
+def test_find_aapt2_checks_default_sdk_of_macos_and_linux(tmp_path):
+    mac = make_build_tools(tmp_path / "Library" / "Android" / "sdk", "34.0.0")
+    assert find_aapt2(Path("/opt/homebrew/bin/adb"), env={"HOME": str(tmp_path)}, cwd=tmp_path) == mac["34.0.0"]
+    linux_home = tmp_path / "l"
+    linux = make_build_tools(linux_home / "Android" / "Sdk", "33.0.1")
+    assert find_aapt2(Path("/usr/bin/adb"), env={"HOME": str(linux_home)}, cwd=tmp_path) == linux["33.0.1"]

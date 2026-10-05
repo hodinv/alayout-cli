@@ -113,7 +113,7 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
     out_dir = out or _default_out()
     save_capture(raw, snap, out_dir)
     if index is not None:
-        save_apk_index(index.restricted_to({n.id for n, _ in snap.root.walk() if n.id}), out_dir)
+        save_apk_index(index.restricted_to({n.id for n, _ in snap.root.walk() if "apk" in n.props}), out_dir)
     _print_summary(snap, out_dir)
     return out_dir
 
@@ -180,6 +180,10 @@ def check(snapshot_dir: Annotated[Optional[Path], typer.Argument(
                       f"{escape(issue.message)}")
 
 
+def _sources(snap: Snapshot) -> set[str]:
+    return {source for node, _ in snap.root.walk() for source in node.sources}
+
+
 def _quote(value: str) -> str:
     return '"' + value.replace('"', '\\"') + '"'
 
@@ -197,7 +201,12 @@ def diff(first: Annotated[Optional[Path], typer.Argument(help="Older snapshot (p
         raise _fail(e)
     console.print(f"{escape(dir_a.name)} ({escape(snap_a.activity or '?')}) -> "
                   f"{escape(dir_b.name)} ({escape(snap_b.activity or '?')})")
-    result = diff_snapshots(snap_a.root, snap_b.root)
+    same_sources = _sources(snap_a) == _sources(snap_b)
+    if not same_sources:
+        console.print("[yellow]warning:[/] the snapshots come from different sources "
+                      f"({', '.join(sorted(_sources(snap_a))) or '-'} vs {', '.join(sorted(_sources(snap_b))) or '-'}); "
+                      "class names are not compared and views without ids may not line up")
+    result = diff_snapshots(snap_a.root, snap_b.root, compare_class=same_sources)
     if result.empty:
         console.print("no differences")
         return

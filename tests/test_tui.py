@@ -5,7 +5,7 @@ from helpers import views_raw, views_snapshot
 from PIL import Image
 from textual.widgets import DataTable, Tree
 
-from layoutcli.apk import ApkIndex
+from layoutcli.apk import ApkIndex, apply_index
 from layoutcli.checks import run_checks
 from layoutcli.snapshot_io import save_apk_index, save_capture
 from layoutcli.tui.app import LayoutApp
@@ -194,11 +194,12 @@ def test_empty_search_while_filtered_clears_filter():
 
 def test_x_shows_layout_xml_for_selected_view(tmp_path):
     snap = views_snapshot()
+    index = ApkIndex(ids={"toolbar": ["res/layout/activity_main.xml"]},
+                     layouts={"res/layout/activity_main.xml":
+                              '<LinearLayout>\n    <TextView android:id="@id/toolbar"/>\n</LinearLayout>'})
+    apply_index(snap.root, index)  # as a real --apk capture does
     save_capture(views_raw(), snap, tmp_path)
-    save_apk_index(ApkIndex(ids={"toolbar": ["res/layout/activity_main.xml"]},
-                            layouts={"res/layout/activity_main.xml":
-                                     '<LinearLayout>\n    <TextView android:id="@id/toolbar"/>\n</LinearLayout>'}),
-                   tmp_path)
+    save_apk_index(index, tmp_path)
 
     async def scenario(app, pilot):
         await pilot.press("slash", *"toolbar", "enter", "x")
@@ -218,3 +219,20 @@ def test_x_without_mapping_only_notifies():
         await pilot.pause()
         assert app.screen.__class__.__name__ != "LayoutXmlScreen"
     run_app(views_snapshot(), scenario)
+
+
+def test_x_ignores_framework_id_even_if_apk_json_has_it(tmp_path):
+    snap = views_snapshot()
+    save_capture(views_raw(), snap, tmp_path)
+    save_apk_index(ApkIndex(ids={"content": ["res/layout/abc_popup_menu_item_layout.xml"]},
+                            layouts={"res/layout/abc_popup_menu_item_layout.xml": '<X android:id="@id/content"/>'}),
+                   tmp_path)
+
+    async def scenario(app, pilot):
+        await pilot.press("slash", *"content", "enter")
+        await pilot.pause()
+        assert app.selected.id == "content"
+        await pilot.press("x")
+        await pilot.pause()
+        assert app.screen.__class__.__name__ != "LayoutXmlScreen"
+    run_app(snap, scenario, base_dir=tmp_path)

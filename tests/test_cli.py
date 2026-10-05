@@ -215,8 +215,10 @@ def test_capture_with_local_apk_maps_ids(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
     monkeypatch.setattr(cli, "find_aapt2", lambda adb_path=None: tmp_path / "aapt2")
     monkeypatch.setattr(cli, "build_index", lambda apk, aapt2: ApkIndex(
-        ids={"toolbar": ["res/layout/activity_main.xml"], "unused": ["res/layout/x.xml"]},
-        layouts={"res/layout/activity_main.xml": "<A/>", "res/layout/x.xml": "<X/>"}))
+        ids={"toolbar": ["res/layout/activity_main.xml"], "unused": ["res/layout/x.xml"],
+             "content": ["res/layout/abc_popup_menu_item_layout.xml"]},
+        layouts={"res/layout/activity_main.xml": "<A/>", "res/layout/x.xml": "<X/>",
+                 "res/layout/abc_popup_menu_item_layout.xml": "<P/>"}))
     apk = tmp_path / "app.apk"
     apk.write_bytes(b"PK")
     out = tmp_path / "snap"
@@ -239,3 +241,16 @@ def test_capture_apk_failure_is_not_fatal(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "aapt2 not found" in result.output
     assert load_apk_index(tmp_path / "snap") is None
+
+
+def test_diff_warns_when_snapshots_come_from_different_sources(tmp_path):
+    save_capture(views_raw(), views_snapshot(), tmp_path / "a")
+    raw = views_raw()
+    raw.dumpsys_text = None
+    raw.errors["dumpsys"] = "boom"
+    from layoutcli.build import build_snapshot
+    save_capture(raw, build_snapshot(raw, "2026-10-05T10:00:00+00:00"), tmp_path / "b")
+    result = runner.invoke(cli.app, ["diff", str(tmp_path / "a"), str(tmp_path / "b")])
+    assert result.exit_code == 0, result.output
+    assert "different sources" in result.output
+    assert 'class "' not in result.output

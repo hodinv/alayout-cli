@@ -10,7 +10,7 @@ def test_paths_use_ids_classes_and_sibling_indexes():
     paths = node_paths(views_snapshot().root)
     assert "/" in paths
     assert "/LinearLayout/#content/#root/#toolbar" in paths
-    assert "/LinearLayout/#content/#root/#list/#item_title[1]" in paths
+    assert "/LinearLayout/#content/#root/#list/#item_title" in paths
     assert "/LinearLayout/#content/#root/#list/#item_title[2]" in paths
 
 
@@ -56,3 +56,20 @@ def test_compared_props_detect_state_changes():
     find_by_id(b, "fab_small").props["uiautomator"]["enabled"] = "false"
     (change,) = diff_snapshots(a, b).changed
     assert change.fields == {"enabled": ("true", "false")}
+
+
+def test_first_row_keeps_its_path_when_a_second_row_appears():
+    a = ViewNode("a.List", id="list", children=[ViewNode("a.Row", id="row", text="one")])
+    b = ViewNode("a.List", id="list", children=[ViewNode("a.Row", id="row", text="uno"),
+                                                ViewNode("a.Row", id="row", text="two")])
+    result = diff_snapshots(a, b)
+    assert [p for p, _ in result.added] == ["/#row[2]"]
+    assert not result.removed
+    assert [(c.path, c.fields) for c in result.changed] == [("/#row", {"text": ("one", "uno")})]
+
+
+def test_class_comparison_can_be_disabled():
+    a = ViewNode("a.Root", children=[ViewNode("androidx.appcompat.widget.AppCompatTextView", id="t")])
+    b = ViewNode("a.Root", children=[ViewNode("android.widget.TextView", id="t")])
+    assert not diff_snapshots(a, b).empty
+    assert diff_snapshots(a, b, compare_class=False).empty

@@ -256,7 +256,8 @@ class LayoutApp(App):
 
     def action_layout_xml(self) -> None:
         node = self.selected
-        files = self._apk.ids.get(node.id, []) if self._apk and node is not None and node.id else []
+        mapped = self._apk is not None and node is not None and node.id and "apk" in node.props
+        files = self._apk.ids.get(node.id, []) if mapped else []
         file = next((f for f in files if f in self._apk.layouts), None)
         if file is None:
             self.notify("no layout XML for this view (capture with --apk PATH or --apk device)")

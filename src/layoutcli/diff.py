@@ -36,12 +36,12 @@ def node_paths(root: ViewNode) -> dict[str, ViewNode]:
 
     def visit(node: ViewNode, path: str) -> None:
         paths[path] = node
-        counts = Counter(_key(c) for c in node.children)
         seen: Counter[str] = Counter()
         for child in node.children:
             key = _key(child)
             seen[key] += 1
-            segment = key if counts[key] == 1 else f"{key}[{seen[key]}]"
+            # the first occurrence is never numbered, so it keeps its path when siblings appear
+            segment = key if seen[key] == 1 else f"{key}[{seen[key]}]"
             visit(child, ("" if path == "/" else path) + "/" + segment)
 
     visit(root, "/")
@@ -63,7 +63,7 @@ def _fields(node: ViewNode) -> dict[str, str]:
     return values
 
 
-def diff_snapshots(a: ViewNode, b: ViewNode) -> DiffResult:
+def diff_snapshots(a: ViewNode, b: ViewNode, compare_class: bool = True) -> DiffResult:
     pa, pb = node_paths(a), node_paths(b)
     result = DiffResult()
     for path, node in pa.items():
@@ -72,6 +72,8 @@ def diff_snapshots(a: ViewNode, b: ViewNode) -> DiffResult:
                 result.removed.append((path, node))
             continue
         fa, fb = _fields(node), _fields(pb[path])
+        if not compare_class:
+            fa.pop("class"), fb.pop("class")
         changed = {k: (fa[k], fb[k]) for k in fa if k in fb and fa[k] != fb[k]}
         if changed:
             result.changed.append(NodeChange(path, node, pb[path], changed))

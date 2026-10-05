@@ -1,7 +1,7 @@
 from helpers import find_by_id, views_snapshot
 
-from layoutcli.search import find_matches, keep_set, node_matches
-from layoutcli.model import ViewNode
+from alayout.search import find_matches, keep_set, node_matches
+from alayout.model import ViewNode
 
 
 def test_node_matches_is_case_insensitive_over_fields():

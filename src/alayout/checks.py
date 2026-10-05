@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from layoutcli.format import dp
-from layoutcli.model import Rect, Snapshot, ViewNode
-from layoutcli.parse.uiautomator import parse_bounds
+from alayout.format import dp
+from alayout.model import Rect, Snapshot, ViewNode
+from alayout.parse.uiautomator import parse_bounds
 
 MAX_DEPTH = 10
 MIN_TOUCH_DP = 48

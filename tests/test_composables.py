@@ -5,8 +5,8 @@ import zipfile
 from helpers import FakeAdb, views_responses
 from typer.testing import CliRunner
 
-from layoutcli import cli
-from layoutcli.composables import (ComposableInfo, app_composables, dex_class_sources, dex_strings,
+from alayout import cli
+from alayout.composables import (ComposableInfo, app_composables, dex_class_sources, dex_strings,
                                    list_composables, parse_source_information)
 
 NO_INDEX = 0xFFFFFFFF

@@ -1,9 +1,9 @@
 import pytest
 from helpers import PNG_BYTES, find_by_id, views_raw, views_snapshot
 
-from layoutcli.build import BuildError, build_snapshot
-from layoutcli.model import Rect
-from layoutcli.snapshot_io import SnapshotError, load_snapshot, save_capture
+from alayout.build import BuildError, build_snapshot
+from alayout.model import Rect
+from alayout.snapshot_io import SnapshotError, load_snapshot, save_capture
 
 AT = "2026-10-04T10:00:00+00:00"
 
@@ -85,7 +85,7 @@ def test_unicode_text_survives_save_and_load(tmp_path):
 
 
 def test_load_rejects_non_snapshot_dir(tmp_path):
-    with pytest.raises(SnapshotError, match="not a layoutcli snapshot"):
+    with pytest.raises(SnapshotError, match="not an alayout snapshot"):
         load_snapshot(tmp_path)
 
 

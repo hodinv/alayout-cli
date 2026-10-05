@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Callable, Mapping
 from xml.sax.saxutils import quoteattr
 
-from layoutcli.adb import _default_sdk_dirs, sdk_dir_from_local_properties
-from layoutcli.model import ViewNode
+from alayout.adb import _default_sdk_dirs, sdk_dir_from_local_properties
+from alayout.model import ViewNode
 
 AAPT2_NAME = "aapt2.exe" if os.name == "nt" else "aapt2"
 _RESOURCE_RE = re.compile(r"^\s*resource (0x[0-9a-f]+) (\S+)")

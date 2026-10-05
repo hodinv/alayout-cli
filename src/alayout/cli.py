@@ -11,19 +11,19 @@ import typer
 from rich.console import Console
 from rich.markup import escape
 
-from layoutcli.adb import Adb, AdbError, find_adb
-from layoutcli.apk import ApkError, apply_index, build_index, find_aapt2
-from layoutcli.build import BuildError, build_snapshot
-from layoutcli.capture import capture_raw, pull_apks
-from layoutcli.checks import run_checks
-from layoutcli.composables import app_composables, list_composables
-from layoutcli.compose import compose_nodes, infer_components
-from layoutcli.diff import diff_snapshots
-from layoutcli.format import node_label
-from layoutcli.model import Snapshot
-from layoutcli.parse.dumpsys import parse_dumpsys
-from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_apk_index, save_capture
-from layoutcli.tui.app import LayoutApp
+from alayout.adb import Adb, AdbError, find_adb
+from alayout.apk import ApkError, apply_index, build_index, find_aapt2
+from alayout.build import BuildError, build_snapshot
+from alayout.capture import capture_raw, pull_apks
+from alayout.checks import run_checks
+from alayout.composables import app_composables, list_composables
+from alayout.compose import compose_nodes, infer_components
+from alayout.diff import diff_snapshots
+from alayout.format import node_label
+from alayout.model import Snapshot
+from alayout.parse.dumpsys import parse_dumpsys
+from alayout.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_apk_index, save_capture
+from alayout.tui.app import LayoutApp
 
 app = typer.Typer(add_completion=False,
                   help="Capture and inspect Android app layouts. "
@@ -143,7 +143,7 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
 
 
 def _global(ctx: typer.Context, serial: str | None, adb: str | None, apk: str | None):
-    """Options given before the command (layoutcli --apk device capture) fill in unset ones."""
+    """Options given before the command (alayout --apk device capture) fill in unset ones."""
     given = ctx.obj or {}
     return serial or given.get("serial"), adb or given.get("adb"), apk or given.get("apk")
 

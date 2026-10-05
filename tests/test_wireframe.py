@@ -1,5 +1,5 @@
-from layoutcli.model import Rect, ViewNode
-from layoutcli.wireframe import render_wireframe, visible_nodes
+from alayout.model import Rect, ViewNode
+from alayout.wireframe import render_wireframe, visible_nodes
 
 
 def screen_tree(child_visibility="visible"):

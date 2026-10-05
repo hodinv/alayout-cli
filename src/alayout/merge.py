@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import replace
 
-from layoutcli.model import Rect, ViewNode, short_id
-from layoutcli.parse.dumpsys import DNode, DumpsysResult
+from alayout.model import Rect, ViewNode, short_id
+from alayout.parse.dumpsys import DNode, DumpsysResult
 
 COMPOSE_HOST_SUFFIX = "AndroidComposeView"
 INTEROP_HANDLER_SUFFIX = "AndroidViewsHandler"

@@ -7,7 +7,7 @@ from rich.color import Color
 from rich.style import Style
 from rich.text import Text
 
-from layoutcli.model import ViewNode
+from alayout.model import ViewNode
 
 HIGHLIGHT = (255, 215, 0)
 DIM = 0.45  # brightness kept outside the selected view in annotate()

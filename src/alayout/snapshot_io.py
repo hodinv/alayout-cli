@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from layoutcli.apk import ApkIndex
-from layoutcli.capture import RawCapture
-from layoutcli.model import Snapshot
+from alayout.apk import ApkIndex
+from alayout.capture import RawCapture
+from alayout.model import Snapshot
 
 SNAPSHOT_FILE = "snapshot.json"
 SCREEN_FILE = "screen.png"
@@ -41,7 +41,7 @@ def save_capture(raw: RawCapture, snap: Snapshot, out_dir: Path) -> None:
 def load_snapshot(path: Path) -> Snapshot:
     file = path / SNAPSHOT_FILE if path.is_dir() else path
     if not file.is_file():
-        raise SnapshotError(f"{path} is not a layoutcli snapshot (no {SNAPSHOT_FILE})")
+        raise SnapshotError(f"{path} is not an alayout snapshot (no {SNAPSHOT_FILE})")
     try:
         return Snapshot.from_dict(json.loads(file.read_text(encoding="utf-8")))
     except (ValueError, KeyError, TypeError, IndexError) as e:

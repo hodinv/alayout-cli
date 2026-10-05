@@ -1,7 +1,7 @@
 from PIL import Image
 
-from layoutcli.model import Rect, ViewNode
-from layoutcli.screenshot import render_screenshot
+from alayout.model import Rect, ViewNode
+from alayout.screenshot import render_screenshot
 
 
 def cell_colors(text, width, row, col):

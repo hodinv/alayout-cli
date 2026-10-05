@@ -5,10 +5,10 @@ from helpers import views_raw, views_snapshot
 from PIL import Image
 from textual.widgets import DataTable, Tree
 
-from layoutcli.apk import ApkIndex, apply_index
-from layoutcli.checks import run_checks
-from layoutcli.snapshot_io import save_apk_index, save_capture
-from layoutcli.tui.app import LayoutApp
+from alayout.apk import ApkIndex, apply_index
+from alayout.checks import run_checks
+from alayout.snapshot_io import save_apk_index, save_capture
+from alayout.tui.app import LayoutApp
 
 
 def tree_nodes(node):

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from layoutcli.build import build_snapshot
-from layoutcli.capture import DUMP_PATH, RawCapture
-from layoutcli.model import ViewNode
+from alayout.build import build_snapshot
+from alayout.capture import DUMP_PATH, RawCapture
+from alayout.model import ViewNode
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from layoutcli.model import Rect, Snapshot, ViewNode, short_id
+from alayout.model import Rect, Snapshot, ViewNode, short_id
 
 
 def test_rect_size_offset_and_str():

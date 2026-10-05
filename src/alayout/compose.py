@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
-from layoutcli.checks import is_clickable
-from layoutcli.model import ViewNode
+from alayout.checks import is_clickable
+from alayout.model import ViewNode
 
 TOGGLE_CLASSES = ("CheckBox", "Switch", "RadioButton", "ToggleButton")
 

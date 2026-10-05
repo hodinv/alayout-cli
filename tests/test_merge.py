@@ -1,10 +1,10 @@
 import pytest
 from helpers import find_by_id, read_fixture
 
-from layoutcli.merge import MergeError, merge, pick_window
-from layoutcli.model import Rect, ViewNode
-from layoutcli.parse.dumpsys import DNode, DumpsysResult, parse_dumpsys
-from layoutcli.parse.uiautomator import parse_uiautomator
+from alayout.merge import MergeError, merge, pick_window
+from alayout.model import Rect, ViewNode
+from alayout.parse.dumpsys import DNode, DumpsysResult, parse_dumpsys
+from alayout.parse.uiautomator import parse_uiautomator
 
 
 def fixture_merge():

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from layoutcli.model import ViewNode
+from alayout.model import ViewNode
 
 
 def node_matches(node: ViewNode, query: str, alias: str | None = None) -> bool:

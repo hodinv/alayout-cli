@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 
 from rich.text import Text
 
-from layoutcli.model import Rect, ViewNode
+from alayout.model import Rect, ViewNode
 
 if TYPE_CHECKING:
-    from layoutcli.compose import Component
+    from alayout.compose import Component
 
 
 def dp(px: int, density: int | None) -> int | None:

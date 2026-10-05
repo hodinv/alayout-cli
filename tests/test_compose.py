@@ -1,5 +1,5 @@
-from layoutcli.compose import Component, infer_components
-from layoutcli.model import Rect, ViewNode
+from alayout.compose import Component, infer_components
+from alayout.model import Rect, ViewNode
 
 
 def u(cls, bounds, text=None, children=(), **attrs):
@@ -89,7 +89,7 @@ def test_uiautomator_only_tree_uses_compose_view_class():
 
 
 def test_compose_nodes_region():
-    from layoutcli.compose import compose_nodes
+    from alayout.compose import compose_nodes
     root, rows, button, back, title, outside = screen()
     region = compose_nodes(root)
     assert button in region and button.children[1] in region and title in region

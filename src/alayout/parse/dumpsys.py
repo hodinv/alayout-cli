@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from layoutcli.model import Rect
+from alayout.model import Rect
 
 _VIEW_RE = re.compile(
     r"^(?P<cls>[\w.$]+)\{(?P<hash>[0-9a-f]+) (?P<f1>\S+) (?P<f2>\S+) "

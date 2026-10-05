@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from layoutcli.adb import Adb, AdbError, list_devices, select_device
+from alayout.adb import Adb, AdbError, list_devices, select_device
 
 ADB = Path("adb")
 

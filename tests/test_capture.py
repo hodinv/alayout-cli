@@ -1,9 +1,9 @@
 import pytest
 from helpers import PNG_BYTES, FakeAdb, views_responses
 
-from layoutcli.adb import AdbError
-from layoutcli.capture import DUMP_PATH, capture_raw, pull_apk
-from layoutcli.parse.wm import parse_wm_density, parse_wm_size
+from alayout.adb import AdbError
+from alayout.capture import DUMP_PATH, capture_raw, pull_apk
+from alayout.parse.wm import parse_wm_density, parse_wm_size
 
 
 def test_wm_parsers_prefer_override():
@@ -74,7 +74,7 @@ def test_pull_apk_unknown_package(tmp_path):
 
 
 def test_pull_apks_fetches_base_and_splits(tmp_path):
-    from layoutcli.capture import pull_apks
+    from alayout.capture import pull_apks
     responses = views_responses()
     responses["pm path com.example.demo"] = (b"package:/data/app/x/split_feature_shop.apk\n"
                                              b"package:/data/app/x/base.apk\n")

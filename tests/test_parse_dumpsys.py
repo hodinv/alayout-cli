@@ -1,7 +1,7 @@
 from helpers import read_fixture
 
-from layoutcli.model import Rect
-from layoutcli.parse.dumpsys import parse_dumpsys
+from alayout.model import Rect
+from alayout.parse.dumpsys import parse_dumpsys
 
 
 def block(component, resumed, hierarchy):

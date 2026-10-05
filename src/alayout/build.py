@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
-from layoutcli.capture import RawCapture
-from layoutcli.merge import merge, select_window
-from layoutcli.model import Snapshot, ViewNode
-from layoutcli.parse.dumpsys import parse_dumpsys
-from layoutcli.parse.uiautomator import parse_uiautomator
-from layoutcli.parse.wm import parse_wm_density, parse_wm_size
+from alayout.capture import RawCapture
+from alayout.merge import merge, select_window
+from alayout.model import Snapshot, ViewNode
+from alayout.parse.dumpsys import parse_dumpsys
+from alayout.parse.uiautomator import parse_uiautomator
+from alayout.parse.wm import parse_wm_density, parse_wm_size
 
 DEFAULT_SCREEN = (1080, 1920)
 

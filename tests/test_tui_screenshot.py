@@ -5,10 +5,10 @@ from PIL import Image
 from test_tui import run_app
 from textual.widgets import DataTable
 
-from layoutcli.apk import ApkIndex, apply_index
-from layoutcli.screenshot import HIGHLIGHT, annotate
-from layoutcli.snapshot_io import save_apk_index, save_capture
-from layoutcli.tui import app as tui_app
+from alayout.apk import ApkIndex, apply_index
+from alayout.screenshot import HIGHLIGHT, annotate
+from alayout.snapshot_io import save_apk_index, save_capture
+from alayout.tui import app as tui_app
 
 
 def snapshot_with_png(tmp_path, size=(108, 240)):

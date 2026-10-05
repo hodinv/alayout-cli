@@ -18,14 +18,14 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
 from textual.widgets.tree import TreeNode
 
-from layoutcli.checks import run_checks
-from layoutcli.compose import compose_nodes, infer_components
-from layoutcli.format import compose_kind, node_label, node_rows
-from layoutcli.model import Snapshot, ViewNode
-from layoutcli.screenshot import annotate, fit_image, render_screenshot
-from layoutcli.search import find_matches, keep_set
-from layoutcli.snapshot_io import load_apk_index
-from layoutcli.wireframe import render_wireframe
+from alayout.checks import run_checks
+from alayout.compose import compose_nodes, infer_components
+from alayout.format import compose_kind, node_label, node_rows
+from alayout.model import Snapshot, ViewNode
+from alayout.screenshot import annotate, fit_image, render_screenshot
+from alayout.search import find_matches, keep_set
+from alayout.snapshot_io import load_apk_index
+from alayout.wireframe import render_wireframe
 
 
 NO_SCREENSHOT = "no screenshot in this snapshot"
@@ -184,7 +184,7 @@ class ScreenshotScreen(ModalScreen):
 
 
 class LayoutApp(App):
-    TITLE = "layoutcli"
+    TITLE = "alayout"
     CSS = """
     #tree { width: 1fr; }
     #right { width: 1fr; }
@@ -404,7 +404,7 @@ class LayoutApp(App):
             self.notify(self._image_note, severity="warning")
             return
         try:
-            with tempfile.NamedTemporaryFile(prefix="layoutcli-", suffix=".png", delete=False) as f:
+            with tempfile.NamedTemporaryFile(prefix="alayout-", suffix=".png", delete=False) as f:
                 annotate(self._image, self.snapshot.screen, self.selected).save(f, format="PNG")
         except OSError as e:
             self.notify(f"cannot save the screenshot: {e}", severity="error")

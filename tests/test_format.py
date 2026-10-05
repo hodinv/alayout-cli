@@ -1,5 +1,5 @@
-from layoutcli.format import dp, node_label, node_rows, size_text
-from layoutcli.model import Rect, ViewNode
+from alayout.format import dp, node_label, node_rows, size_text
+from alayout.model import Rect, ViewNode
 
 
 def test_dp_and_size_text():
@@ -35,14 +35,14 @@ def test_node_label_warning_badge():
 
 
 def test_node_label_with_compose_component():
-    from layoutcli.compose import Component
+    from alayout.compose import Component
     node = ViewNode("android.view.View", bounds=Rect(48, 1846, 1032, 2016), sources=["uiautomator"])
     label = node_label(node, warning=True, component=Component("Button", "Продолжить"))
     assert label.plain == 'View 984x170 ◇ ⟨Button "Продолжить"⟩ ⚠'
 
 
 def test_node_rows_include_compose_section():
-    from layoutcli.compose import Component
+    from alayout.compose import Component
     node = ViewNode("android.view.View", sources=["uiautomator"], props={"uiautomator": {"clickable": "true"}})
     rows = node_rows(node, 420, Component("Clickable", "Всегда", ("selected",), (1, 5)))
     i = rows.index(("view", "sources", "uiautomator"))
@@ -52,7 +52,7 @@ def test_node_rows_include_compose_section():
 
 
 def test_compose_label_uses_component_kind_instead_of_class():
-    from layoutcli.compose import Component
+    from alayout.compose import Component
     node = ViewNode("android.view.View", bounds=Rect(48, 1846, 1032, 2016), sources=["uiautomator"])
     assert node_label(node, component=Component("Button", "Продолжить", (), (1, 2)), in_compose=True).plain == \
         'Button "Продолжить" 984x170 (1 of 2 similar)'

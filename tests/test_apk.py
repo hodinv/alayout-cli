@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 from helpers import FIXTURES, find_by_id, read_fixture, views_snapshot
 
-from layoutcli.apk import (ApkError, ApkIndex, apply_index, build_index, find_aapt2, parse_resources_dump,
+from alayout.apk import (ApkError, ApkIndex, apply_index, build_index, find_aapt2, parse_resources_dump,
                            parse_xmltree)
-from layoutcli.model import ViewNode
+from alayout.model import ViewNode
 
 AAPT2 = "aapt2.exe" if __import__("os").name == "nt" else "aapt2"
 
@@ -149,7 +149,7 @@ def test_build_index_covers_split_apks_and_skips_broken_ones():
 
 def test_list_composables_reads_every_apk(tmp_path):
     from test_composables import make_apk
-    from layoutcli.composables import list_composables
+    from alayout.composables import list_composables
     base = make_apk(tmp_path / "base.apk")
     feature = make_apk(tmp_path / "split_f.apk", strings=["C(ShopScreen)10@1L2:Shop.kt#h1"],
                        classes=[("Lcom/quitsmoke/tracker/shop/ShopKt;", "Shop.kt")])

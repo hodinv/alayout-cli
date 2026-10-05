@@ -6,10 +6,10 @@ import sys
 from helpers import FakeAdb, views_raw, views_responses, views_snapshot
 from typer.testing import CliRunner
 
-from layoutcli import cli
-from layoutcli.adb import AdbError
-from layoutcli.apk import ApkError, ApkIndex
-from layoutcli.snapshot_io import load_apk_index, save_capture
+from alayout import cli
+from alayout.adb import AdbError
+from alayout.apk import ApkError, ApkIndex
+from alayout.snapshot_io import load_apk_index, save_capture
 
 runner = CliRunner()
 
@@ -64,7 +64,7 @@ def test_inspect_without_dir_captures_first(tmp_path, monkeypatch):
 def test_inspect_rejects_non_snapshot_dir(tmp_path):
     result = runner.invoke(cli.app, ["inspect", str(tmp_path)])
     assert result.exit_code == 1
-    assert "not a layoutcli snapshot" in result.output
+    assert "not an alayout snapshot" in result.output
 
 
 def _record_app(monkeypatch):
@@ -175,7 +175,7 @@ def test_check_output_redirected_to_file_does_not_crash(tmp_path):
     save_capture(views_raw(), views_snapshot(), tmp_path)
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
     env["PYTHONIOENCODING"] = "cp1252"
-    proc = subprocess.run([sys.executable, "-c", "from layoutcli.cli import app; app()", "check", str(tmp_path)],
+    proc = subprocess.run([sys.executable, "-c", "from alayout.cli import app; app()", "check", str(tmp_path)],
                           capture_output=True, env=env)
     assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
     assert "⚠" in proc.stdout.decode("utf-8")
@@ -248,7 +248,7 @@ def test_diff_warns_when_snapshots_come_from_different_sources(tmp_path):
     raw = views_raw()
     raw.dumpsys_text = None
     raw.errors["dumpsys"] = "boom"
-    from layoutcli.build import build_snapshot
+    from alayout.build import build_snapshot
     save_capture(raw, build_snapshot(raw, "2026-10-05T10:00:00+00:00"), tmp_path / "b")
     result = runner.invoke(cli.app, ["diff", str(tmp_path / "a"), str(tmp_path / "b")])
     assert result.exit_code == 0, result.output

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass, field
 
-from layoutcli.model import ViewNode
+from alayout.model import ViewNode
 
 COMPARED_PROPS = ("content-desc", "clickable", "enabled", "checked", "selected", "focused")
 

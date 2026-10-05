@@ -4,14 +4,14 @@ from pathlib import Path
 from helpers import PNG_BYTES, FakeAdb, views_raw, views_responses, views_snapshot
 from typer.testing import CliRunner
 
-from layoutcli import cli
-from layoutcli.adb import _parse_properties, list_devices
-from layoutcli.apk import _attr_value
-from layoutcli.capture import capture_raw
-from layoutcli.checks import run_checks
-from layoutcli.diff import diff_snapshots
-from layoutcli.model import Rect, Snapshot, ViewNode
-from layoutcli.snapshot_io import APK_FILE, SCREEN_FILE, save_capture
+from alayout import cli
+from alayout.adb import _parse_properties, list_devices
+from alayout.apk import _attr_value
+from alayout.capture import capture_raw
+from alayout.checks import run_checks
+from alayout.diff import diff_snapshots
+from alayout.model import Rect, Snapshot, ViewNode
+from alayout.snapshot_io import APK_FILE, SCREEN_FILE, save_capture
 
 
 def test_properties_decode_unicode_escapes():

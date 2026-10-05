@@ -2,8 +2,8 @@ import copy
 
 from helpers import find_by_id, views_snapshot
 
-from layoutcli.diff import diff_snapshots, node_paths
-from layoutcli.model import Rect, ViewNode
+from alayout.diff import diff_snapshots, node_paths
+from alayout.model import Rect, ViewNode
 
 
 def test_paths_use_ids_classes_and_sibling_indexes():

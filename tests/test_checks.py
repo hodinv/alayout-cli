@@ -1,7 +1,7 @@
 from helpers import views_snapshot
 
-from layoutcli.checks import is_clickable, run_checks
-from layoutcli.model import Rect, Snapshot, ViewNode
+from alayout.checks import is_clickable, run_checks
+from alayout.model import Rect, Snapshot, ViewNode
 
 CLICK = {"dumpsys": {"flags": "V.ED..C.. ........"}}
 

@@ -1,6 +1,6 @@
-from layoutcli.merge import merge
-from layoutcli.model import Rect, ViewNode
-from layoutcli.parse.dumpsys import DNode, DumpsysResult
+from alayout.merge import merge
+from alayout.model import Rect, ViewNode
+from alayout.parse.dumpsys import DNode, DumpsysResult
 
 VISIBLE = "V.E...... ........"
 

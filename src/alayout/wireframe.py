@@ -5,7 +5,7 @@ from typing import Iterator
 
 from rich.text import Text
 
-from layoutcli.model import Rect, ViewNode
+from alayout.model import Rect, ViewNode
 
 FRAME_STYLE = "grey50"
 SELECTED_STYLE = "bold yellow"

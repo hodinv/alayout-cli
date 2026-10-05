@@ -3,8 +3,8 @@ import xml.etree.ElementTree as ET
 import pytest
 from helpers import find_by_id, read_fixture
 
-from layoutcli.model import Rect
-from layoutcli.parse.uiautomator import parse_bounds, parse_uiautomator
+from alayout.model import Rect
+from alayout.parse.uiautomator import parse_bounds, parse_uiautomator
 
 HEADER = "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>"
 

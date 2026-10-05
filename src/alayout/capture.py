@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from layoutcli.adb import AdbError
+from alayout.adb import AdbError
 
-DUMP_PATH = "/data/local/tmp/layoutcli_dump.xml"
+DUMP_PATH = "/data/local/tmp/alayout_dump.xml"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 

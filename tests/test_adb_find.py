@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from layoutcli.adb import ADB_NAME, AdbError, find_adb
+from alayout.adb import ADB_NAME, AdbError, find_adb
 
 
 def make_sdk(root: Path) -> Path:

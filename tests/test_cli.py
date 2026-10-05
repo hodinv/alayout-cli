@@ -188,7 +188,7 @@ def test_diff_prints_changes(tmp_path):
     save_capture(views_raw(), changed, b)
     result = runner.invoke(cli.app, ["diff", str(a), str(b)])
     assert result.exit_code == 0, result.output
-    plain = re.sub(r"\[[0-9;]*m", "", result.output)
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
     assert '~ /LinearLayout/#content/#root/#toolbar/AppCompatTextView  text "Demo" -> "Settings"' in plain
     assert "0 added, 0 removed, 1 changed" in result.output
 

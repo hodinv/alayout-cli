@@ -74,6 +74,8 @@ def diff_snapshots(a: ViewNode, b: ViewNode, compare_class: bool = True) -> Diff
         fa, fb = _fields(node), _fields(pb[path])
         if not compare_class:
             fa.pop("class"), fb.pop("class")
+        if not fa["bounds"] or not fb["bounds"]:
+            fa.pop("bounds"), fb.pop("bounds")
         changed = {k: (fa[k], fb[k]) for k in fa if k in fb and fa[k] != fb[k]}
         if changed:
             result.changed.append(NodeChange(path, node, pb[path], changed))

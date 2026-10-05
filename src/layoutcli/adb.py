@@ -15,6 +15,11 @@ class AdbError(Exception):
 
 
 _PROP_RE = re.compile(r"^\s*([^=:\s]+)\s*[=:]\s*(.*)$")
+_ESCAPE_RE = re.compile(r"\\u([0-9a-fA-F]{4})|\\(.)")
+
+
+def _unescape(m: re.Match) -> str:
+    return chr(int(m.group(1), 16)) if m.group(1) else m.group(2)
 
 
 def _parse_properties(text: str) -> dict[str, str]:
@@ -26,7 +31,7 @@ def _parse_properties(text: str) -> dict[str, str]:
             continue
         m = _PROP_RE.match(line)
         if m:
-            result[m.group(1)] = re.sub(r"\\(.)", r"\1", m.group(2).strip())
+            result[m.group(1)] = _ESCAPE_RE.sub(_unescape, m.group(2).strip())
     return result
 
 
@@ -113,9 +118,9 @@ def list_devices(adb_path: Path, runner: Runner) -> list[tuple[str, str]]:
         line = line.strip()
         if not line or line.startswith("*") or line.startswith("List of devices"):
             continue
-        parts = line.split()
-        if len(parts) >= 2:
-            devices.append((parts[0], parts[1]))
+        parts = line.split(None, 1)
+        if len(parts) == 2:
+            devices.append((parts[0], parts[1].strip()))
     return devices
 
 

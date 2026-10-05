@@ -80,7 +80,12 @@ def _choose_snapshot(title: str = "Snapshot") -> Path | None:
 def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None,
                       title: str = "Snapshot", apk: str | None = None) -> Path:
     directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot(title)
-    return directory if directory is not None else _capture(adb, serial, None, apk)
+    if directory is None:
+        return _capture(adb, serial, None, apk)
+    if apk:
+        err_console.print("[yellow]warning:[/] --apk is ignored for an existing snapshot "
+                          "(it applies to new captures)")
+    return directory
 
 
 def _print_summary(snap: Snapshot, out_dir: Path) -> None:
@@ -114,7 +119,7 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
         try:
             index = _apk_index(adb, apk, snap.package)
             snap.capabilities["apk"] = f"ok ({apply_index(snap.root, index)} views mapped)"
-        except (ApkError, AdbError) as e:
+        except (ApkError, AdbError, OSError) as e:
             index = None
             snap.capabilities["apk"] = str(e)
     out_dir = out or _default_out()
@@ -123,6 +128,12 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
         save_apk_index(index.restricted_to({n.id for n, _ in snap.root.walk() if "apk" in n.props}), out_dir)
     _print_summary(snap, out_dir)
     return out_dir
+
+
+def _global(ctx: typer.Context, serial: str | None, adb: str | None, apk: str | None):
+    """Options given before the command (layoutcli --apk device capture) fill in unset ones."""
+    given = ctx.obj or {}
+    return serial or given.get("serial"), adb or given.get("adb"), apk or given.get("apk")
 
 
 def _fail(error: Exception) -> typer.Exit:
@@ -134,44 +145,48 @@ def _fail(error: Exception) -> typer.Exit:
 def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None) -> None:
     """Capture and inspect Android app layouts."""
     _utf8_output()
+    ctx.obj = {"serial": serial, "adb": adb, "apk": apk}  # also accepted before the command
     if ctx.invoked_subcommand is None:
         try:
             directory = _capture(adb, serial, None, apk)
             snap = load_snapshot(directory)
-        except (AdbError, BuildError, SnapshotError) as e:
+        except (AdbError, BuildError, SnapshotError, OSError) as e:
             raise _fail(e)
         LayoutApp(snap, base_dir=directory).run()
 
 
 @app.command()
-def capture(serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
+def capture(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
             out: Annotated[Optional[Path], typer.Option("--out", "-o", help="Snapshot directory.")] = None
             ) -> None:
     """Capture the foreground screen's layout into a snapshot directory."""
+    serial, adb, apk = _global(ctx, serial, adb, apk)
     try:
         _capture(adb, serial, out, apk)
-    except (AdbError, BuildError) as e:
+    except (AdbError, BuildError, OSError) as e:
         raise _fail(e)
 
 
 @app.command()
-def inspect(snapshot_dir: Annotated[Optional[Path], typer.Argument(
+def inspect(ctx: typer.Context, snapshot_dir: Annotated[Optional[Path], typer.Argument(
                 help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
             serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None) -> None:
     """Open a snapshot in the interactive inspector."""
+    serial, adb, apk = _global(ctx, serial, adb, apk)
     try:
         directory = _resolve_snapshot(snapshot_dir, adb, serial, apk=apk)
         snap = load_snapshot(directory)
-    except (AdbError, BuildError, SnapshotError) as e:
+    except (AdbError, BuildError, SnapshotError, OSError) as e:
         raise _fail(e)
     LayoutApp(snap, base_dir=directory).run()
 
 
 @app.command()
-def check(snapshot_dir: Annotated[Optional[Path], typer.Argument(
+def check(ctx: typer.Context, snapshot_dir: Annotated[Optional[Path], typer.Argument(
               help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
           serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Report layout problems: small touch targets, missing labels, overlaps, deep nesting..."""
+    serial, adb, _ = _global(ctx, serial, adb, None)
     try:
         snap = load_snapshot(_resolve_snapshot(snapshot_dir, adb, serial))
     except (AdbError, BuildError, SnapshotError) as e:
@@ -198,10 +213,11 @@ def _quote(value: str) -> str:
 
 
 @app.command()
-def diff(first: Annotated[Optional[Path], typer.Argument(help="Older snapshot (picked when omitted).")] = None,
+def diff(ctx: typer.Context, first: Annotated[Optional[Path], typer.Argument(help="Older snapshot (picked when omitted).")] = None,
          second: Annotated[Optional[Path], typer.Argument(help="Newer snapshot (picked when omitted).")] = None,
          serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Show views added, removed and changed between two snapshots."""
+    serial, adb, _ = _global(ctx, serial, adb, None)
     try:
         dir_a = _resolve_snapshot(first, adb, serial, "First snapshot")
         dir_b = _resolve_snapshot(second, adb, serial, "Second snapshot")

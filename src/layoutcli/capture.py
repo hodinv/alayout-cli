@@ -45,9 +45,10 @@ def _dump_uiautomator(adb: DeviceShell) -> str:
 
 def _screenshot(adb: DeviceShell) -> bytes:
     png = adb.exec_out("screencap -p", timeout=30.0)
-    if not png.startswith(PNG_SIGNATURE):
+    start = png.find(PNG_SIGNATURE)  # multi-display devices print a warning before the image
+    if start < 0:
         raise AdbError("screencap returned no PNG data")
-    return png
+    return png[start:]
 
 
 def capture_raw(adb: DeviceShell) -> RawCapture:

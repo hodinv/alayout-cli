@@ -34,7 +34,10 @@ def _overlap(a: Rect, b: Rect) -> bool:
 
 
 def _has_text(node: ViewNode) -> bool:
-    return any(n.text or n.props.get("uiautomator", {}).get("content-desc") for n, _ in node.walk())
+    if node.visibility != "visible":
+        return False
+    return bool(node.text or node.props.get("uiautomator", {}).get("content-desc")) or any(
+        _has_text(c) for c in node.children)
 
 
 def _clipped(b: Rect, window: Rect | None, screen: Rect) -> bool:
@@ -72,9 +75,13 @@ def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
                                     "use GONE if it should not reserve space"))
             return
         visible.append((node, ancestors))
-        if depth == max_depth + 1:
-            issues.append(Issue("deep-nesting", "info", node,
-                                f"nested {depth} levels deep (more than {max_depth}); consider flattening"))
+        if depth == max_depth:
+            deep = [c for c in node.children if c.visibility != "gone"]
+            if deep:
+                count = f"{len(deep)} views are" if len(deep) > 1 else "is"
+                issues.append(Issue("deep-nesting", "info", deep[0],
+                                    f"{count} nested {depth + 1} levels deep (more than {max_depth}); "
+                                    "consider flattening"))
         for child in node.children:
             walk(child, depth + 1, ancestors + (node,), True)
 

@@ -23,12 +23,17 @@ def save_capture(raw: RawCapture, snap: Snapshot, out_dir: Path) -> None:
                           ("wm_size.txt", raw.wm_size), ("wm_density.txt", raw.wm_density)):
         if content is not None:
             (raw_dir / name).write_text(content, encoding="utf-8")
+        else:
+            (raw_dir / name).unlink(missing_ok=True)  # left over from an earlier capture into this dir
+    (out_dir / APK_FILE).unlink(missing_ok=True)
     (raw_dir / "capture.json").write_text(
         json.dumps({"device": raw.device, "errors": raw.errors}, indent=2, ensure_ascii=False),
         encoding="utf-8")
     if raw.screenshot_png:
         (out_dir / SCREEN_FILE).write_bytes(raw.screenshot_png)
         snap.screenshot = SCREEN_FILE
+    else:
+        (out_dir / SCREEN_FILE).unlink(missing_ok=True)
     (out_dir / SNAPSHOT_FILE).write_text(
         json.dumps(snap.to_dict(), indent=1, ensure_ascii=False), encoding="utf-8")
 

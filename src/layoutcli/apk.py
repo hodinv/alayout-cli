@@ -74,7 +74,11 @@ def _attr_value(name: str, raw: str, names: dict[str, str]) -> str:
     raw = raw.strip()
     if raw.startswith("@0x") or raw.startswith("?0x"):
         ref = names.get(raw[1:])
-        return f"{raw[0]}{ref}" if ref else raw
+        if ref:
+            return f"{raw[0]}{ref}"
+        if raw[1:].startswith("0x01"):  # platform resource; its name is not in the APK
+            return f"{raw[0]}android:{'attr/' if raw[0] == '?' else ''}{raw[1:]}"
+        return raw
     if raw.startswith('"'):
         m = re.match(r'"((?:[^"\\]|\\.)*)"', raw)
         return m.group(1) if m else raw

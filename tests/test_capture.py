@@ -71,3 +71,15 @@ def test_pull_apk_writes_base_apk(tmp_path):
 def test_pull_apk_unknown_package(tmp_path):
     with pytest.raises(AdbError, match="not installed"):
         pull_apk(FakeAdb(views_responses()), "com.missing", tmp_path / "base.apk")
+
+
+def test_pull_apks_fetches_base_and_splits(tmp_path):
+    from layoutcli.capture import pull_apks
+    responses = views_responses()
+    responses["pm path com.example.demo"] = (b"package:/data/app/x/split_feature_shop.apk\n"
+                                             b"package:/data/app/x/base.apk\n")
+    responses["cat /data/app/x/base.apk"] = b"PK base"
+    responses["cat /data/app/x/split_feature_shop.apk"] = b"PK shop"
+    paths = pull_apks(FakeAdb(responses), "com.example.demo", tmp_path)
+    assert [p.name for p in paths] == ["base.apk", "split_feature_shop.apk"]
+    assert paths[1].read_bytes() == b"PK shop"

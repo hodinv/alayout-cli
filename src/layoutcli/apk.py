@@ -170,16 +170,37 @@ def _run(args: list[str]) -> str:
     return proc.stdout.decode("utf-8", "replace")
 
 
-def build_index(apk_path: Path, aapt2: Path, runner: Callable[[list[str]], str] | None = None) -> ApkIndex:
+def build_index(apk_paths: Path | list[Path], aapt2: Path,
+                runner: Callable[[list[str]], str] | None = None) -> ApkIndex:
+    """Index layouts of the base APK and any split APKs (dynamic features); a split aapt2 cannot
+    read is skipped, the base APK must be readable. Split layouts are keyed "split.apk!res/..."."""
     run = runner or _run
-    names, layout_files = parse_resources_dump(run([str(aapt2), "dump", "resources", str(apk_path)]))
+    apks = [apk_paths] if isinstance(apk_paths, Path) else list(apk_paths)
+    names: dict[str, str] = {}
+    jobs: list[tuple[Path, str]] = []
+    for position, apk in enumerate(apks):
+        try:
+            apk_names, layout_files = parse_resources_dump(run([str(aapt2), "dump", "resources", str(apk)]))
+        except ApkError:
+            if position == 0:
+                raise
+            continue
+        names.update(apk_names)  # features reference base resources, so names are shared
+        jobs += [(apk, file) for file in layout_files]
+    base = apks[0]
 
-    def decode(file: str) -> tuple[str, str, list[str]]:
-        xml, ids = parse_xmltree(run([str(aapt2), "dump", "xmltree", "--file", file, str(apk_path)]), names)
-        return file, xml, ids
+    def decode(job: tuple[Path, str]) -> tuple[str, str, list[str]]:
+        apk, file = job
+        try:
+            xml, ids = parse_xmltree(run([str(aapt2), "dump", "xmltree", "--file", file, str(apk)]), names)
+        except ApkError:
+            if apk == base:
+                raise
+            return file, "", []
+        return (file if apk == base else f"{apk.name}!{file}"), xml, ids
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        decoded = list(pool.map(decode, layout_files))
+        decoded = list(pool.map(decode, jobs))
     index = ApkIndex()
     for file, xml, ids in decoded:
         if not ids:

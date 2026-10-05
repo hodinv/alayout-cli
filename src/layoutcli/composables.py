@@ -73,22 +73,24 @@ def _package(descriptor: str) -> str:
     return descriptor.strip("L;").rsplit("/", 1)[0].replace("/", ".")
 
 
-def list_composables(apk_path: Path) -> list[ComposableInfo]:
+def list_composables(apk_paths: Path | list[Path]) -> list[ComposableInfo]:
+    """Composables in the APK(s); pass split APKs too, dynamic features keep their code there."""
     entries: list[tuple[str, str, int | None, str]] = []
     packages: dict[str, set[str]] = {}
-    with zipfile.ZipFile(apk_path) as apk:
-        for name in apk.namelist():
-            if not _DEX_RE.fullmatch(name):
-                continue
-            data = apk.read(name)
-            strings = dex_strings(data)
-            for descriptor, source in dex_class_sources(data, strings):
-                packages.setdefault(source, set()).add(_package(descriptor))
-            for text in strings:
-                parsed = parse_source_information(text)
-                if parsed:
-                    h = _HASH_RE.search(text)
-                    entries.append((*parsed, h.group(1) if h else ""))
+    for apk_path in [apk_paths] if isinstance(apk_paths, Path) else apk_paths:
+        with zipfile.ZipFile(apk_path) as apk:
+            for name in apk.namelist():
+                if not _DEX_RE.fullmatch(name):
+                    continue
+                data = apk.read(name)
+                strings = dex_strings(data)
+                for descriptor, source in dex_class_sources(data, strings):
+                    packages.setdefault(source, set()).add(_package(descriptor))
+                for text in strings:
+                    parsed = parse_source_information(text)
+                    if parsed:
+                        h = _HASH_RE.search(text)
+                        entries.append((*parsed, h.group(1) if h else ""))
     # The "#hash" suffix identifies the compiled package; it separates a library LazyDsl.kt from
     # app classes whose inlined code also carries the source name LazyDsl.kt.
     votes: dict[str, Counter[str]] = defaultdict(Counter)

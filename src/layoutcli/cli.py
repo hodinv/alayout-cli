@@ -14,7 +14,7 @@ from rich.markup import escape
 from layoutcli.adb import Adb, AdbError, find_adb
 from layoutcli.apk import ApkError, apply_index, build_index, find_aapt2
 from layoutcli.build import BuildError, build_snapshot
-from layoutcli.capture import capture_raw, pull_apk
+from layoutcli.capture import capture_raw, pull_apks
 from layoutcli.checks import run_checks
 from layoutcli.composables import app_composables, list_composables
 from layoutcli.compose import compose_nodes, infer_components
@@ -34,7 +34,8 @@ err_console = Console(stderr=True, soft_wrap=True)
 SerialOpt = Annotated[Optional[str], typer.Option("--serial", "-s", help="Device serial (see `adb devices`).")]
 AdbOpt = Annotated[Optional[str], typer.Option("--adb", help="Path to adb or its directory.")]
 ApkOpt = Annotated[Optional[str], typer.Option(
-    "--apk", help="Map view ids to layout XML: path to the app's APK, or 'device' to pull it (needs SDK build-tools).")]
+    "--apk", help="Map view ids to layout XML: the app's APK, a folder of APKs (base + splits), "
+                  "or 'device' to pull them (needs SDK build-tools).")]
 
 
 def _utf8_output() -> None:
@@ -100,14 +101,25 @@ def _print_summary(snap: Snapshot, out_dir: Path) -> None:
     console.print(f"Saved to {escape(str(out_dir))}")
 
 
+def _local_apks(apk: str) -> list[Path]:
+    """--apk PATH: one APK, or a folder with base.apk and split APKs."""
+    path = Path(apk)
+    if not path.is_dir():
+        return [path]
+    found = sorted(path.glob("*.apk"), key=lambda p: (p.name != "base.apk", p.name))
+    if not found:
+        raise ApkError(f"no .apk files in {path}")
+    return found
+
+
 def _apk_index(adb: Adb, apk: str, package: str | None):
     aapt2 = find_aapt2(getattr(adb, "adb_path", None))
     if apk != "device":
-        return build_index(Path(apk), aapt2)
+        return build_index(_local_apks(apk), aapt2)
     if not package:
         raise ApkError("cannot pull the APK: package unknown")
     with tempfile.TemporaryDirectory() as tmp:
-        return build_index(pull_apk(adb, package, Path(tmp) / "base.apk"), aapt2)
+        return build_index(pull_apks(adb, package, Path(tmp)), aapt2)
 
 
 def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: str | None = None) -> Path:
@@ -255,16 +267,16 @@ def composables(apk: ApkOpt = None,
     try:
         with tempfile.TemporaryDirectory() as tmp:
             if apk and apk != "device":
-                apk_path = Path(apk)
+                apk_paths = _local_apks(apk)
             else:
                 device = _make_adb(adb, serial)
                 top = parse_dumpsys(device.exec_out("dumpsys activity top").decode("utf-8", "replace"))
                 if top is None or not top.package:
                     raise AdbError("no foreground app found; open the app or pass --apk PATH")
                 package = top.package
-                apk_path = pull_apk(device, package, Path(tmp) / "base.apk")
-            items = list_composables(apk_path)
-    except (AdbError, OSError, zipfile.BadZipFile) as e:
+                apk_paths = pull_apks(device, package, Path(tmp))
+            items = list_composables(apk_paths)
+    except (AdbError, ApkError, OSError, zipfile.BadZipFile) as e:
         raise _fail(e)
     shown = items if show_all else app_composables(items, package)
     if not previews:

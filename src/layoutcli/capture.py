@@ -74,15 +74,28 @@ def capture_raw(adb: DeviceShell) -> RawCapture:
     return raw
 
 
-def pull_apk(adb: DeviceShell, package: str, dest: Path) -> Path:
-    """Copy the installed base APK of `package` from the device to `dest`."""
+def _installed_apks(adb: DeviceShell, package: str) -> list[str]:
+    """Device paths of the package's APKs, base first (then splits: dynamic features, configs)."""
     paths = [line[len("package:"):].strip() for line in _text(adb.exec_out(f"pm path {package}")).splitlines()
              if line.startswith("package:")]
     if not paths:
         raise AdbError(f"package {package} is not installed on the device")
-    base = next((p for p in paths if p.endswith("/base.apk")), paths[0])
-    data = adb.exec_out(f"cat {base}", timeout=600.0)
+    return sorted(paths, key=lambda p: not p.endswith("/base.apk"))
+
+
+def _pull(adb: DeviceShell, device_path: str, dest: Path) -> Path:
+    data = adb.exec_out(f"cat {device_path}", timeout=600.0)
     if not data.startswith(b"PK"):
-        raise AdbError(f"could not read {base}")
+        raise AdbError(f"could not read {device_path}")
     dest.write_bytes(data)
     return dest
+
+
+def pull_apk(adb: DeviceShell, package: str, dest: Path) -> Path:
+    """Copy the installed base APK of `package` from the device to `dest`."""
+    return _pull(adb, _installed_apks(adb, package)[0], dest)
+
+
+def pull_apks(adb: DeviceShell, package: str, dest_dir: Path) -> list[Path]:
+    """Copy the base APK and every split APK of `package` into `dest_dir`, base first."""
+    return [_pull(adb, p, dest_dir / p.rsplit("/", 1)[-1]) for p in _installed_apks(adb, package)]

@@ -121,3 +121,37 @@ def test_find_aapt2_checks_default_sdk_of_macos_and_linux(tmp_path):
     linux_home = tmp_path / "l"
     linux = make_build_tools(linux_home / "Android" / "Sdk", "33.0.1")
     assert find_aapt2(Path("/usr/bin/adb"), env={"HOME": str(linux_home)}, cwd=tmp_path) == linux["33.0.1"]
+
+
+def test_build_index_covers_split_apks_and_skips_broken_ones():
+    base_res = ("Package name=com.app id=7f\n  type layout id=01 entryCount=1\n"
+                "    resource 0x7f010000 layout/main\n      () (file) res/layout/main.xml type=XML\n"
+                "  type id id=02 entryCount=1\n    resource 0x7f020000 id/title\n")
+    shop_res = ("Package name=com.app id=80\n  type layout id=01 entryCount=1\n"
+                "    resource 0x80010000 layout/shop\n      () (file) res/layout/shop.xml type=XML\n"
+                "  type id id=02 entryCount=1\n    resource 0x80020000 id/cart\n")
+    trees = {"res/layout/main.xml": "E: LinearLayout (line=2)\n  A: http://schemas.android.com/apk/res/android:id(0x010100d0)=@0x7f020000\n",
+             "res/layout/shop.xml": "E: FrameLayout (line=2)\n  A: http://schemas.android.com/apk/res/android:id(0x010100d0)=@0x80020000\n"
+                                    "  E: TextView (line=3)\n    A: http://schemas.android.com/apk/res/android:labelFor(0x01010395)=@0x7f020000\n"}
+
+    def runner(args):
+        apk = args[-1]
+        if apk.endswith("broken.apk"):
+            raise ApkError("aapt2 failed")
+        if args[2] == "resources":
+            return base_res if apk.endswith("base.apk") else shop_res
+        return trees[args[args.index("--file") + 1]]
+
+    index = build_index([Path("base.apk"), Path("split_shop.apk"), Path("broken.apk")], Path("aapt2"), runner=runner)
+    assert index.ids == {"title": ["res/layout/main.xml"], "cart": ["split_shop.apk!res/layout/shop.xml"]}
+    assert 'android:labelFor="@id/title"' in index.layouts["split_shop.apk!res/layout/shop.xml"]  # base names resolved
+
+
+def test_list_composables_reads_every_apk(tmp_path):
+    from test_composables import make_apk
+    from layoutcli.composables import list_composables
+    base = make_apk(tmp_path / "base.apk")
+    feature = make_apk(tmp_path / "split_f.apk", strings=["C(ShopScreen)10@1L2:Shop.kt#h1"],
+                       classes=[("Lcom/quitsmoke/tracker/shop/ShopKt;", "Shop.kt")])
+    names = {c.name for c in list_composables([base, feature])}
+    assert {"ShopScreen", "AnswerOption"} <= names

@@ -177,3 +177,33 @@ def test_check_output_redirected_to_file_does_not_crash(tmp_path):
                           capture_output=True, env=env)
     assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
     assert "⚠" in proc.stdout.decode("utf-8")
+
+
+def test_diff_prints_changes(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    save_capture(views_raw(), views_snapshot(), a)
+    changed = views_snapshot()
+    next(n for n, _ in changed.root.walk() if n.text == "Demo").text = "Settings"
+    save_capture(views_raw(), changed, b)
+    result = runner.invoke(cli.app, ["diff", str(a), str(b)])
+    assert result.exit_code == 0, result.output
+    plain = __import__("re").sub(r"\[[0-9;]*m", "", result.output)
+    assert '~ /LinearLayout/#content/#root/#toolbar/AppCompatTextView  text "Demo" -> "Settings"' in plain
+    assert "0 added, 0 removed, 1 changed" in result.output
+
+
+def test_diff_identical_snapshots(tmp_path):
+    save_capture(views_raw(), views_snapshot(), tmp_path / "a")
+    result = runner.invoke(cli.app, ["diff", str(tmp_path / "a"), str(tmp_path / "a")])
+    assert result.exit_code == 0
+    assert "no differences" in result.output
+
+
+def test_diff_picks_missing_snapshots(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _saved(tmp_path, "capture-old", "2026-10-01T10:00:00+00:00", "com.a.Old")
+    _saved(tmp_path, "capture-new", "2026-10-05T10:00:00+00:00", "com.a.New")
+    result = runner.invoke(cli.app, ["diff"], input="2\n1\n")
+    assert result.exit_code == 0, result.output
+    assert "First snapshot" in result.output and "Second snapshot" in result.output
+    assert "capture-old" in result.output.splitlines()[-2] or "no differences" in result.output

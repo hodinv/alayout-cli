@@ -13,6 +13,7 @@ from layoutcli.adb import Adb, AdbError, find_adb
 from layoutcli.build import BuildError, build_snapshot
 from layoutcli.capture import capture_raw
 from layoutcli.checks import run_checks
+from layoutcli.diff import diff_snapshots
 from layoutcli.format import node_label
 from layoutcli.model import Snapshot
 from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_capture
@@ -49,17 +50,18 @@ def _default_out() -> Path:
     return SNAPSHOTS_DIR / f"capture-{datetime.now():%Y%m%d-%H%M%S}"
 
 
-def _choose_snapshot() -> Path | None:
+def _choose_snapshot(title: str = "Snapshot") -> Path | None:
     """Let the user pick a saved snapshot; None means capture a new one."""
     snapshots = list_snapshots(SNAPSHOTS_DIR)
     if not snapshots:
         return None
+    console.print(f"[bold]{escape(title)}[/]")
     for number, (folder, snap) in enumerate(snapshots, start=1):
         console.print(f"  [bold]{number:>2}[/]  {escape(folder.name):<28} "
                       f"{escape(snap.activity or snap.package or '?')}  [dim]{escape(snap.captured_at)}[/]")
     console.print("   [bold]n[/]  new capture")
     while True:
-        answer = typer.prompt("Snapshot", default="1").strip().lower()
+        answer = typer.prompt(title, default="1").strip().lower()
         if answer == "n":
             return None
         if answer.isdigit() and 1 <= int(answer) <= len(snapshots):
@@ -67,8 +69,9 @@ def _choose_snapshot() -> Path | None:
         err_console.print(f"choose 1-{len(snapshots)} or n")
 
 
-def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None) -> Path:
-    directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot()
+def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None,
+                      title: str = "Snapshot") -> Path:
+    directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot(title)
     return directory if directory is not None else _capture(adb, serial, None)
 
 
@@ -151,3 +154,34 @@ def check(snapshot_dir: Annotated[Optional[Path], typer.Argument(
         console.print(f"  [{style}]{issue.severity:<7}[/] {issue.check:<22} "
                       f"{escape(node_label(issue.node, warning=issue.severity == 'warning').plain)}  "
                       f"{escape(issue.message)}")
+
+
+def _quote(value: str) -> str:
+    return '"' + value.replace('"', '\\"') + '"'
+
+
+@app.command()
+def diff(first: Annotated[Optional[Path], typer.Argument(help="Older snapshot (picked when omitted).")] = None,
+         second: Annotated[Optional[Path], typer.Argument(help="Newer snapshot (picked when omitted).")] = None,
+         serial: SerialOpt = None, adb: AdbOpt = None) -> None:
+    """Show views added, removed and changed between two snapshots."""
+    try:
+        dir_a = _resolve_snapshot(first, adb, serial, "First snapshot")
+        dir_b = _resolve_snapshot(second, adb, serial, "Second snapshot")
+        snap_a, snap_b = load_snapshot(dir_a), load_snapshot(dir_b)
+    except (AdbError, BuildError, SnapshotError) as e:
+        raise _fail(e)
+    console.print(f"{escape(dir_a.name)} ({escape(snap_a.activity or '?')}) -> "
+                  f"{escape(dir_b.name)} ({escape(snap_b.activity or '?')})")
+    result = diff_snapshots(snap_a.root, snap_b.root)
+    if result.empty:
+        console.print("no differences")
+        return
+    for path, node in result.removed:
+        console.print(f"[red]- {escape(path)}[/]  {escape(node_label(node).plain)}")
+    for path, node in result.added:
+        console.print(f"[green]+ {escape(path)}[/]  {escape(node_label(node).plain)}")
+    for change in result.changed:
+        parts = "; ".join(f"{k} {_quote(old)} -> {_quote(new)}" for k, (old, new) in change.fields.items())
+        console.print(f"[yellow]~ {escape(change.path)}[/]  {escape(parts)}")
+    console.print(f"{len(result.added)} added, {len(result.removed)} removed, {len(result.changed)} changed")

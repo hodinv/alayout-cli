@@ -21,7 +21,7 @@ def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def node_label(node: ViewNode) -> Text:
+def node_label(node: ViewNode, warning: bool = False) -> Text:
     label = Text(node.short_class, style="bold")
     if node.id:
         label.append(f" #{node.id}", style="cyan")
@@ -34,6 +34,8 @@ def node_label(node: ViewNode) -> Text:
         label.stylize("dim")
     if node.sources == ["uiautomator"]:
         label.append(" ◇", style="magenta")
+    if warning:
+        label.append(" ⚠", style="yellow")
     return label
 
 

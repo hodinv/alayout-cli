@@ -27,3 +27,8 @@ def test_node_rows_lists_view_fields_then_source_props():
     assert rows[0] == ("view", "class", "a.B")
     assert ("view", "size", "420x420px (160x160dp)") in rows
     assert rows[-2:] == [("dumpsys", "hash", "abc"), ("uiautomator", "clickable", "true")]
+
+
+def test_node_label_warning_badge():
+    node = ViewNode("android.widget.ImageButton", id="fab")
+    assert node_label(node, warning=True).plain == "ImageButton #fab ⚠"

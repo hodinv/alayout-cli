@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
@@ -11,6 +12,8 @@ from rich.markup import escape
 from layoutcli.adb import Adb, AdbError, find_adb
 from layoutcli.build import BuildError, build_snapshot
 from layoutcli.capture import capture_raw
+from layoutcli.checks import run_checks
+from layoutcli.format import node_label
 from layoutcli.model import Snapshot
 from layoutcli.snapshot_io import SnapshotError, list_snapshots, load_snapshot, save_capture
 from layoutcli.tui.app import LayoutApp
@@ -23,6 +26,16 @@ err_console = Console(stderr=True, soft_wrap=True)
 
 SerialOpt = Annotated[Optional[str], typer.Option("--serial", "-s", help="Device serial (see `adb devices`).")]
 AdbOpt = Annotated[Optional[str], typer.Option("--adb", help="Path to adb or its directory.")]
+
+
+def _utf8_output() -> None:
+    """Redirected output on Windows defaults to cp1252, which cannot encode ◇/⚠ labels."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if not stream.isatty():
+                stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
 
 
 def _make_adb(adb_path: str | None, serial: str | None) -> Adb:
@@ -54,6 +67,11 @@ def _choose_snapshot() -> Path | None:
         err_console.print(f"choose 1-{len(snapshots)} or n")
 
 
+def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None) -> Path:
+    directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot()
+    return directory if directory is not None else _capture(adb, serial, None)
+
+
 def _print_summary(snap: Snapshot, out_dir: Path) -> None:
     count = sum(1 for _ in snap.root.walk())
     console.print(f"Captured {count} views from {escape(snap.activity or snap.package or 'unknown app')}")
@@ -81,6 +99,7 @@ def _fail(error: Exception) -> typer.Exit:
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Capture and inspect Android app layouts."""
+    _utf8_output()
     if ctx.invoked_subcommand is None:
         try:
             snap = load_snapshot(_capture(adb, serial, None))
@@ -106,10 +125,28 @@ def inspect(snapshot_dir: Annotated[Optional[Path], typer.Argument(
             serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Open a snapshot in the interactive inspector."""
     try:
-        directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot()
-        if directory is None:
-            directory = _capture(adb, serial, None)
+        directory = _resolve_snapshot(snapshot_dir, adb, serial)
         snap = load_snapshot(directory)
     except (AdbError, BuildError, SnapshotError) as e:
         raise _fail(e)
     LayoutApp(snap).run()
+
+
+@app.command()
+def check(snapshot_dir: Annotated[Optional[Path], typer.Argument(
+              help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
+          serial: SerialOpt = None, adb: AdbOpt = None) -> None:
+    """Report layout problems: small touch targets, missing labels, overlaps, deep nesting..."""
+    try:
+        snap = load_snapshot(_resolve_snapshot(snapshot_dir, adb, serial))
+    except (AdbError, BuildError, SnapshotError) as e:
+        raise _fail(e)
+    issues = run_checks(snap)
+    warnings = sum(1 for i in issues if i.severity == "warning")
+    console.print(f"{warnings} warnings, {len(issues) - warnings} info in "
+                  f"{escape(snap.activity or snap.package or 'unknown app')}")
+    for issue in sorted(issues, key=lambda i: (i.severity != "warning", i.check)):
+        style = "yellow" if issue.severity == "warning" else "dim"
+        console.print(f"  [{style}]{issue.severity:<7}[/] {issue.check:<22} "
+                      f"{escape(node_label(issue.node, warning=issue.severity == 'warning').plain)}  "
+                      f"{escape(issue.message)}")

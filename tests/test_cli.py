@@ -1,3 +1,7 @@
+import os
+import subprocess
+import sys
+
 from helpers import FakeAdb, views_raw, views_responses, views_snapshot
 from typer.testing import CliRunner
 
@@ -155,3 +159,21 @@ def test_inspect_picker_skips_unreadable_folders(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "junk" not in result.output and "broken" not in result.output
     assert opened[0].activity == "com.a.Ok"
+
+
+def test_check_prints_issues(tmp_path):
+    save_capture(views_raw(), views_snapshot(), tmp_path)
+    result = runner.invoke(cli.app, ["check", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "2 warnings, 2 info" in result.output
+    assert "touch-target" in result.output and "#fab_small" in result.output
+
+
+def test_check_output_redirected_to_file_does_not_crash(tmp_path):
+    save_capture(views_raw(), views_snapshot(), tmp_path)
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+    env["PYTHONIOENCODING"] = "cp1252"
+    proc = subprocess.run([sys.executable, "-c", "from layoutcli.cli import app; app()", "check", str(tmp_path)],
+                          capture_output=True, env=env)
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
+    assert "⚠" in proc.stdout.decode("utf-8")

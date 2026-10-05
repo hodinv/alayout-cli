@@ -6,6 +6,7 @@ from helpers import FIXTURES, find_by_id, read_fixture, views_snapshot
 
 from layoutcli.apk import (ApkError, ApkIndex, apply_index, build_index, find_aapt2, parse_resources_dump,
                            parse_xmltree)
+from layoutcli.model import ViewNode
 
 AAPT2 = "aapt2.exe" if __import__("os").name == "nt" else "aapt2"
 
@@ -90,3 +91,17 @@ def test_build_index_with_real_aapt2():
     index = build_index(FIXTURES / "mini.apk", find_aapt2(None))
     assert set(index.ids) == {"root", "toolbar", "fab_small", "item_title"}
     assert index.ids["item_title"] == ["res/layout-v1/item_row.xml"]
+
+
+def test_framework_ids_are_not_mapped_to_app_layouts():
+    index = ApkIndex(ids={"content": ["res/layout/abc_popup_menu_item_layout.xml"],
+                          "toolbar": ["res/layout/activity_main.xml"]}, layouts={})
+    framework = ViewNode("android.widget.FrameLayout", id="content",
+                         props={"dumpsys": {"resource_id": "android:id/content"}})
+    from_ui = ViewNode("android.widget.FrameLayout", id="content",
+                       props={"uiautomator": {"resource-id": "android:id/content"}})
+    app_view = ViewNode("a.Toolbar", id="toolbar", props={"dumpsys": {"resource_id": "app:id/toolbar"}})
+    root = ViewNode("DecorView", children=[framework, from_ui, app_view])
+    assert apply_index(root, index) == 1
+    assert "apk" not in framework.props and "apk" not in from_ui.props
+    assert app_view.props["apk"] == {"layouts": "res/layout/activity_main.xml"}

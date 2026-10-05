@@ -184,10 +184,17 @@ def build_index(apk_path: Path, aapt2: Path, runner: Callable[[list[str]], str] 
     return index
 
 
+def _is_framework_id(node: ViewNode) -> bool:
+    """android:id/... views belong to the platform; the APK index only knows the app's own ids."""
+    full = (node.props.get("dumpsys", {}).get("resource_id")
+            or node.props.get("uiautomator", {}).get("resource-id") or "")
+    return full.startswith("android:")
+
+
 def apply_index(root: ViewNode, index: ApkIndex) -> int:
     mapped = 0
     for node, _ in root.walk():
-        if node.id and node.id in index.ids:
+        if node.id and node.id in index.ids and not _is_framework_id(node):
             node.props["apk"] = {"layouts": ", ".join(index.ids[node.id])}
             mapped += 1
     return mapped

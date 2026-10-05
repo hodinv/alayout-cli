@@ -13,6 +13,10 @@ Inspect the layout of a running Android app from the terminal: one-shot capture,
     layoutcli capture [-s SERIAL] [--adb PATH] [-o DIR]   # save snapshot of the foreground screen
     layoutcli inspect [DIR]                               # open TUI; without DIR pick a saved snapshot (or n = new)
     layoutcli check [DIR]                                 # report layout problems (touch targets, labels, overlaps...)
+    layoutcli diff [A] [B]                                # views added/removed/changed between two snapshots
+
+`--apk PATH` or `--apk device` (on `layoutcli`, `capture`, `inspect`) maps view ids to the layout XML files
+that declare them; needs Android SDK build-tools (aapt2). The APK itself is not stored, only `apk.json`.
 
 Snapshots go to `layout-snapshots/capture-YYYYMMDD-HHMMSS` unless `-o` is given.
 
@@ -24,5 +28,5 @@ Data sources: `dumpsys activity top` (real View tree, including GONE views), `ui
 In the tree, `◇` marks nodes known only from uiautomator (e.g. Compose semantics).
 
 TUI keys: arrows navigate the tree, `/` search (id, class, text, content-desc), `n`/`N` next/previous match,
-`f` filter the tree to matches, `p` switch wireframe/screenshot, `c` checks list (Enter jumps to the view), `q` quit.
+`f` filter the tree to matches, `p` switch wireframe/screenshot, `c` checks list (Enter jumps to the view), `x` layout XML of the view (with `--apk`), `q` quit.
 Views with warnings are marked `⚠`.

@@ -18,7 +18,7 @@ Inspect the layout of a running Android app from the terminal: one-shot capture,
 
 `--apk PATH` or `--apk device` (on `layoutcli`, `capture`, `inspect`) maps view ids to the layout XML files
 that declare them; needs Android SDK build-tools (aapt2). The APK itself is not stored, only `apk.json`. Options may also go before the command (`layoutcli --apk device capture`); for an existing snapshot `--apk` is ignored.
-aapt2 is looked up next to adb, in `ANDROID_HOME`/`ANDROID_SDK_ROOT`, the project's `local.properties` and the default SDK folder (Windows `%LOCALAPPDATA%AndroidSdk`, macOS `~/Library/Android/sdk`, Linux `~/Android/Sdk`).
+aapt2 is looked up next to adb, in `ANDROID_HOME`/`ANDROID_SDK_ROOT`, the project's `local.properties` and the default SDK folder (Windows `%LOCALAPPDATA%/Android/Sdk`, macOS `~/Library/Android/sdk`, Linux `~/Android/Sdk`).
 
 Snapshots go to `layout-snapshots/capture-YYYYMMDD-HHMMSS` unless `-o` is given.
 

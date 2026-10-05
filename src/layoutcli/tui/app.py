@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 
 from PIL import Image
@@ -16,30 +20,63 @@ from layoutcli.checks import run_checks
 from layoutcli.compose import compose_nodes, infer_components
 from layoutcli.format import compose_kind, node_label, node_rows
 from layoutcli.model import Snapshot, ViewNode
-from layoutcli.screenshot import render_screenshot
+from layoutcli.screenshot import annotate, fit_image, render_screenshot
 from layoutcli.search import find_matches, keep_set
 from layoutcli.snapshot_io import load_apk_index
 from layoutcli.wireframe import render_wireframe
 
 
-def _load_image(snapshot: Snapshot, base_dir: Path | None) -> Image.Image | None:
+NO_SCREENSHOT = "no screenshot in this snapshot"
+
+
+def _load_image(snapshot: Snapshot, base_dir: Path | None) -> tuple[Image.Image | None, str]:
+    """The screenshot, or None and why not."""
     if base_dir is None or not snapshot.screenshot:
-        return None
+        return None, NO_SCREENSHOT
     try:
         with Image.open(base_dir / snapshot.screenshot) as img:
-            return img.convert("RGB")
-    except OSError:
-        return None
+            return img.convert("RGB"), ""
+    except OSError as e:
+        return None, f"cannot read the screenshot {snapshot.screenshot}: {e}"
 
 
-class Wireframe(Widget):
+def open_file(path: Path) -> None:
+    """Show a file in the system's default viewer."""
+    if sys.platform == "win32":
+        os.startfile(path)  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+class ScreenshotView(Widget):
+    """Half-block screenshot sized to the widget, resized only when the widget size changes."""
+
+    def __init__(self, image: Image.Image | None, screen: tuple[int, int], **kwargs):
+        super().__init__(**kwargs)
+        self.image = image
+        self.device_screen = screen
+        self.selected: ViewNode | None = None
+        self._fitted: tuple[tuple[int, int], Image.Image | None] | None = None
+
+    def screenshot(self, cols: int, rows: int) -> Text:
+        if self._fitted is None or self._fitted[0] != (cols, rows):
+            self._fitted = ((cols, rows), fit_image(self.image, cols, rows))
+        return render_screenshot(self.image, self.device_screen, cols, rows, self.selected, self._fitted[1])
+
+    def render(self) -> Text:
+        size = self.content_size
+        return self.screenshot(size.width, size.height)
+
+
+class Wireframe(ScreenshotView):
     """Preview pane: box wireframe or the device screenshot, with the selected view highlighted."""
 
-    def __init__(self, snapshot: Snapshot, image: Image.Image | None = None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, snapshot: Snapshot, image: Image.Image | None = None, image_note: str = NO_SCREENSHOT,
+                 **kwargs):
+        super().__init__(image, snapshot.screen, **kwargs)
         self.snapshot = snapshot
-        self.image = image
-        self.selected: ViewNode | None = None
+        self.image_note = image_note
         self.selected_label: str | None = None
         self.mode = "wireframe"
 
@@ -56,8 +93,8 @@ class Wireframe(Widget):
         size = self.content_size
         if self.mode == "screenshot":
             if self.image is None:
-                return Text("no screenshot in this snapshot (p: back to wireframe)", style="dim")
-            return render_screenshot(self.image, self.snapshot.screen, size.width, size.height, self.selected)
+                return Text(f"{self.image_note} (p: back to wireframe)", style="dim")
+            return self.screenshot(size.width, size.height)
         return render_wireframe(self.snapshot.root, self.snapshot.screen,
                                 size.width, size.height, self.selected, self.selected_label)
 
@@ -71,22 +108,61 @@ class LayoutXmlScreen(ModalScreen):
     #xml { width: 90%; height: 85%; border: round $primary; background: $surface; }
     """
 
-    def __init__(self, title: str, xml: str, view_id: str):
+    def __init__(self, title: str, layouts: list[tuple[str, str]], view_id: str):
         super().__init__()
         self.title_text = title
         self.body = Text()
+        self.first_match: int | None = None
         marker = f'android:id="@id/{view_id}"'
-        for i, line in enumerate(xml.splitlines()):
+        lines: list[tuple[str, str]] = []
+        for file, xml in layouts:
+            if len(layouts) > 1:
+                if lines:
+                    lines.append(("", ""))
+                lines.append((f"<!-- {file} -->", "bold"))
+            lines += [(line, "bold reverse" if marker in line else "") for line in xml.splitlines()]
+        for i, (line, style) in enumerate(lines):
             if i:
                 self.body.append("\n")
-            self.body.append(line, style="bold reverse" if marker in line else "")
+            self.body.append(line, style=style)
+            if style == "bold reverse" and self.first_match is None:
+                self.first_match = i
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="xml"):
             yield Static(self.body)
 
     def on_mount(self) -> None:
-        self.query_one("#xml").border_title = self.title_text
+        box = self.query_one("#xml", VerticalScroll)
+        box.border_title = self.title_text
+        if self.first_match is not None:  # keep a few lines of context above the highlighted view
+            self.call_after_refresh(box.scroll_to, y=max(0, self.first_match - 5), animate=False)
+
+
+class ScreenshotScreen(ModalScreen):
+    """The screenshot as large as the terminal allows, with the selected view outlined."""
+
+    BINDINGS = [Binding("escape", "dismiss", "Close"), Binding("q", "dismiss", "Close"),
+                Binding("s", "dismiss", "Close", show=False),
+                Binding("o", "app.open_screenshot", "Open PNG")]
+    DEFAULT_CSS = """
+    ScreenshotScreen { align: center middle; }
+    #shot { width: 100%; height: 100%; border: round $primary; background: $surface; }
+    """
+
+    def __init__(self, image: Image.Image, screen: tuple[int, int], selected: ViewNode | None, title: str):
+        super().__init__()
+        self.image, self.screen_size, self.selected, self.title_text = image, screen, selected, title
+
+    def compose(self) -> ComposeResult:
+        view = ScreenshotView(self.image, self.screen_size, id="shot")
+        view.selected = self.selected
+        yield view
+
+    def on_mount(self) -> None:
+        shot = self.query_one("#shot")
+        shot.border_title = self.title_text
+        shot.border_subtitle = "esc: close  o: open PNG in image viewer"
 
 
 class LayoutApp(App):
@@ -106,6 +182,8 @@ class LayoutApp(App):
         Binding("N", "prev_match", "Prev"),
         Binding("f", "filter", "Filter"),
         Binding("p", "preview", "Preview"),
+        Binding("s", "screenshot", "Screenshot"),
+        Binding("o", "open_screenshot", "Open PNG"),
         Binding("c", "checks", "Checks"),
         Binding("x", "layout_xml", "Layout XML"),
         Binding("escape", "close_search", "Close", show=False),
@@ -115,13 +193,13 @@ class LayoutApp(App):
         super().__init__()
         self.snapshot = snapshot
         self.selected: ViewNode | None = None
-        self.issues = run_checks(snapshot)
+        self.issues = sorted(run_checks(snapshot), key=lambda i: i.severity != "warning")
         self.components = infer_components(snapshot.root)
         self._compose = compose_nodes(snapshot.root)
         self._aliases: dict[ViewNode, str] = {}
         self._warned = {i.node for i in self.issues if i.severity == "warning"}
         self._tree_nodes: dict[ViewNode, TreeNode[ViewNode]] = {}
-        self._image = _load_image(snapshot, base_dir)
+        self._image, self._image_note = _load_image(snapshot, base_dir)
         self._apk = load_apk_index(base_dir) if base_dir is not None else None
         self._query = ""
         self._matches: list[ViewNode] = []
@@ -135,7 +213,7 @@ class LayoutApp(App):
             with Vertical(id="right"):
                 yield DataTable(id="props", cursor_type="row", zebra_stripes=True)
                 yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
-                yield Wireframe(self.snapshot, self._image, id="wire")
+                yield Wireframe(self.snapshot, self._image, self._image_note, id="wire")
         yield Input(placeholder="search id, class, text, content-desc  (Enter: find, Esc: close)", id="search")
         yield Footer()
 
@@ -275,12 +353,35 @@ class LayoutApp(App):
     def action_layout_xml(self) -> None:
         node = self.selected
         mapped = self._apk is not None and node is not None and node.id and "apk" in node.props
-        files = self._apk.ids.get(node.id, []) if mapped else []
-        file = next((f for f in files if f in self._apk.layouts), None)
-        if file is None:
+        files = [f for f in (self._apk.ids.get(node.id, []) if mapped else []) if f in self._apk.layouts]
+        if not files:
             self.notify("no layout XML for this view (capture with --apk PATH or --apk device)")
             return
-        self.push_screen(LayoutXmlScreen(f"{file}  (#{node.id})", self._apk.layouts[file], node.id))
+        title = files[0] if len(files) == 1 else f"{len(files)} layouts"
+        self.push_screen(LayoutXmlScreen(f"{title}  (#{node.id})",
+                                         [(f, self._apk.layouts[f]) for f in files], node.id))
+
+    def _selected_title(self) -> str:
+        return self._plain_label(self.selected).plain if self.selected is not None else "screenshot"
+
+    def action_screenshot(self) -> None:
+        if self._image is None:
+            self.notify(self._image_note, severity="warning")
+            return
+        self.push_screen(ScreenshotScreen(self._image, self.snapshot.screen, self.selected, self._selected_title()))
+
+    def action_open_screenshot(self) -> None:
+        if self._image is None:
+            self.notify(self._image_note, severity="warning")
+            return
+        try:
+            with tempfile.NamedTemporaryFile(prefix="layoutcli-", suffix=".png", delete=False) as f:
+                annotate(self._image, self.snapshot.screen, self.selected).save(f, format="PNG")
+            open_file(Path(f.name))
+        except OSError as e:
+            self.notify(f"cannot open the screenshot: {e}", severity="error")
+            return
+        self.notify(f"opened {f.name}")
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id == "issues":

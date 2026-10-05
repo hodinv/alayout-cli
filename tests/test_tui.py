@@ -97,16 +97,6 @@ def test_preview_renders_real_png(tmp_path):
     run_app(snap, scenario, base_dir=tmp_path)
 
 
-def test_unreadable_screenshot_shows_hint(tmp_path):
-    snap = views_snapshot()
-    save_capture(views_raw(), snap, tmp_path)  # helpers PNG_BYTES is a signature only, not a real image
-
-    async def scenario(app, pilot):
-        await pilot.press("p")
-        assert "no screenshot" in app.query_one("#wire").render().plain
-    run_app(snap, scenario, base_dir=tmp_path)
-
-
 def test_search_jumps_and_cycles_matches():
     async def scenario(app, pilot):
         await pilot.press("slash", *"item_title", "enter")

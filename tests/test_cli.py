@@ -36,7 +36,7 @@ def test_inspect_opens_saved_snapshot(tmp_path, monkeypatch):
     opened = []
 
     class FakeApp:
-        def __init__(self, snapshot):
+        def __init__(self, snapshot, base_dir=None):
             opened.append(snapshot)
 
         def run(self):
@@ -52,7 +52,7 @@ def test_inspect_without_dir_captures_first(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
     opened = []
-    monkeypatch.setattr(cli, "LayoutApp", lambda snap: type("A", (), {"run": lambda self: opened.append(snap)})())
+    monkeypatch.setattr(cli, "LayoutApp", lambda snap, base_dir=None: type("A", (), {"run": lambda self: opened.append(snap)})())
     result = runner.invoke(cli.app, ["inspect"])
     assert result.exit_code == 0, result.output
     assert len(opened) == 1
@@ -67,7 +67,7 @@ def test_inspect_rejects_non_snapshot_dir(tmp_path):
 
 def _record_app(monkeypatch):
     opened = []
-    monkeypatch.setattr(cli, "LayoutApp", lambda snap: type("A", (), {"run": lambda self: opened.append(snap)})())
+    monkeypatch.setattr(cli, "LayoutApp", lambda snap, base_dir=None: type("A", (), {"run": lambda self: opened.append(snap)})())
     return opened
 
 

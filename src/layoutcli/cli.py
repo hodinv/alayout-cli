@@ -102,10 +102,11 @@ def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None) -> No
     _utf8_output()
     if ctx.invoked_subcommand is None:
         try:
-            snap = load_snapshot(_capture(adb, serial, None))
+            directory = _capture(adb, serial, None)
+            snap = load_snapshot(directory)
         except (AdbError, BuildError, SnapshotError) as e:
             raise _fail(e)
-        LayoutApp(snap).run()
+        LayoutApp(snap, base_dir=directory).run()
 
 
 @app.command()
@@ -129,7 +130,7 @@ def inspect(snapshot_dir: Annotated[Optional[Path], typer.Argument(
         snap = load_snapshot(directory)
     except (AdbError, BuildError, SnapshotError) as e:
         raise _fail(e)
-    LayoutApp(snap).run()
+    LayoutApp(snap, base_dir=directory).run()
 
 
 @app.command()

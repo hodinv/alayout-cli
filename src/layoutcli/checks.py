@@ -48,6 +48,11 @@ def _clipped(b: Rect, window: Rect | None, screen: Rect) -> bool:
             or (b.left <= window.left and window.left > screen.left))
 
 
+def _inside(inner: Rect, outer: Rect) -> bool:
+    return (outer.left <= inner.left and outer.top <= inner.top
+            and inner.right <= outer.right and inner.bottom <= outer.bottom)
+
+
 def _name(node: ViewNode) -> str:
     return node.short_class + (f"#{node.id}" if node.id else "")
 
@@ -76,19 +81,22 @@ def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
     walk(snap.root, 0, (), True)
     window = parse_bounds(snap.root.props.get("uiautomator", {}).get("bounds", ""))
 
+    off_screen: set[ViewNode] = set()
     for node, ancestors in visible:
         b = node.bounds
-        if b is None:
+        if b is None or any(a in off_screen for a in ancestors):
             continue
         if not _has_area(b):
             if not node.children:
                 issues.append(Issue("zero-size", "info", node, "visible but has zero size"))
             continue
         if not _overlap(b, screen):
+            off_screen.add(node)
             issues.append(Issue("off-screen", "warning", node, f"entirely outside the screen {screen}"))
             continue
         clickable = is_clickable(node)
-        if clickable and snap.density and not _clipped(b, window, screen):
+        maybe_clipped = node.sources == ["uiautomator"] and _clipped(b, window, screen)
+        if clickable and snap.density and not maybe_clipped:
             w, h = dp(b.width, snap.density), dp(b.height, snap.density)
             if w < MIN_TOUCH_DP or h < MIN_TOUCH_DP:
                 issues.append(Issue("touch-target", "warning", node,
@@ -96,14 +104,20 @@ def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
         ui = node.props.get("uiautomator")
         if ui is not None and (clickable or "Image" in node.short_class) and not _has_text(node):
             parent = ancestors[-1] if ancestors else None
-            labelled_by_parent = parent is not None and parent.bounds == b and _has_text(parent)
-            clickable_owner = next((a for a in reversed(ancestors) if is_clickable(a)), None)
-            if clickable and clickable_owner is not None and _has_text(clickable_owner):
-                issues.append(Issue("nested-clickable", "info", node,
-                                    f"separately clickable inside labelled {_name(clickable_owner)}; screen "
-                                    "readers announce it without a label (Compose: RadioButton/Checkbox "
-                                    "onClick = null and Modifier.selectable/toggleable on the row)"))
-            elif not labelled_by_parent:
+            siblings = parent.children if parent is not None else []
+            labelled = (parent is not None and parent.bounds == b and _has_text(parent)) or any(
+                s is not node and not is_clickable(s) and s.bounds is not None and _inside(s.bounds, b)
+                and _has_text(s) for s in siblings)
+            owner = next((a for a in reversed(ancestors) if is_clickable(a)), None)
+            if labelled:
+                pass
+            elif owner is not None and _has_text(owner):
+                if clickable:
+                    issues.append(Issue("nested-clickable", "info", node,
+                                        f"separately clickable inside labelled {_name(owner)}; screen "
+                                        "readers announce it without a label (Compose: RadioButton/Checkbox "
+                                        "onClick = null and Modifier.selectable/toggleable on the row)"))
+            else:
                 issues.append(Issue("missing-label", "warning", node,
                                     "clickable or image view without text or content description"))
 

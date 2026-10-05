@@ -165,3 +165,27 @@ def test_checks_list_and_badges():
         await pilot.pause()
         assert app.selected is app.issues[0].node
     run_app(snap, scenario)
+
+
+def test_no_match_search_while_filtered_keeps_tree():
+    async def scenario(app, pilot):
+        tree = app.query_one("#tree", Tree)
+        await pilot.press("slash", *"toolbar", "enter", "f")
+        await pilot.pause()
+        assert sum(1 for _ in tree_nodes(tree.root)) == 5
+        await pilot.press("slash", *"zzz", "enter")
+        await pilot.pause()
+        assert sum(1 for _ in tree_nodes(tree.root)) == 5
+        assert "zzz" not in app.sub_title
+    run_app(views_snapshot(), scenario)
+
+
+def test_empty_search_while_filtered_clears_filter():
+    async def scenario(app, pilot):
+        tree = app.query_one("#tree", Tree)
+        total = sum(1 for _ in tree_nodes(tree.root))
+        await pilot.press("slash", *"toolbar", "enter", "f", "slash", *["backspace"] * 7, "enter")
+        await pilot.pause()
+        assert sum(1 for _ in tree_nodes(tree.root)) == total
+        assert app._filtered is False
+    run_app(views_snapshot(), scenario)

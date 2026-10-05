@@ -103,7 +103,7 @@ class LayoutApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.sub_title = self.snapshot.activity or self.snapshot.package or ""
+        self.sub_title = self._default_subtitle()
         self.query_one("#props", DataTable).add_columns("source", "property", "value")
         table = self.query_one("#issues", DataTable)
         table.add_columns("severity", "check", "view", "message")
@@ -167,13 +167,26 @@ class LayoutApp(App):
         self.query_one("#tree", Tree).focus()
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        self._query = event.value.strip()
-        self._matches = find_matches(self.snapshot.root, self._query)
-        self._match_index = -1
+        query = event.value.strip()
         self.action_close_search()
+        if not query:  # empty search clears search and filter
+            self._query, self._matches, self._match_index = "", [], -1
+            if self._filtered:
+                self._filtered = False
+                self._populate(None)
+            self.sub_title = self._default_subtitle()
+            return
+        matches = find_matches(self.snapshot.root, query)
+        if not matches:  # keep the previous search, filter and tree
+            self.notify(f"no matches for {query!r}", severity="warning")
+            return
+        self._query, self._matches, self._match_index = query, matches, -1
         if self._filtered:
-            self._populate(keep_set(self.snapshot.root, self._query) if self._query else None)
+            self._populate(keep_set(self.snapshot.root, self._query))
         self._step_match(1)
+
+    def _default_subtitle(self) -> str:
+        return self.snapshot.activity or self.snapshot.package or ""
 
     def action_next_match(self) -> None:
         self._step_match(1)

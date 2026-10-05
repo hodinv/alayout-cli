@@ -89,7 +89,7 @@ def test_gone_subtree_is_skipped_and_invisible_reported():
 
 def test_touch_target_skipped_for_view_clipped_by_uiautomator_window():
     # edge-to-edge app: uiautomator clips the window at 2167, the real button is taller
-    clipped = ViewNode("android.view.View", id="clipped", bounds=Rect(48, 2040, 1032, 2167),
+    clipped = ViewNode("android.view.View", id="clipped", bounds=Rect(48, 2040, 1032, 2167), sources=["uiautomator"],
                        props={"uiautomator": {"clickable": "true", "content-desc": "Later"}})
     short = ViewNode("android.view.View", id="short", bounds=Rect(48, 1000, 1032, 1127),
                      props={"uiautomator": {"clickable": "true", "content-desc": "Short"}})
@@ -108,3 +108,39 @@ def test_unlabelled_clickable_inside_labelled_clickable_row_is_nested_not_missin
     issues = run_checks(snap_of(row, density=480))
     assert [(i.check, i.node.id, i.severity) for i in issues] == [("nested-clickable", "radio", "info")]
     assert "onClick = null" in issues[0].message
+
+
+def test_button_labelled_by_same_bounds_sibling_inside_taller_parent():
+    ui = {"clickable": "true", "content-desc": ""}
+    button = ViewNode("android.widget.Button", id="btn", bounds=Rect(48, 1846, 1032, 2016), props={"uiautomator": ui})
+    label = ViewNode("android.widget.TextView", text="OK", bounds=Rect(48, 1846, 1032, 2016),
+                     props={"uiautomator": {"content-desc": ""}})
+    column = ViewNode("android.view.View", bounds=Rect(0, 1500, 1080, 2100), children=[label, button],
+                      props={"uiautomator": {}})
+    assert checks(snap_of(column)) == []
+
+
+def test_icon_inside_labelled_clickable_row_is_not_reported():
+    icon = ViewNode("android.widget.ImageView", id="icon", bounds=Rect(0, 0, 144, 144),
+                    props={"uiautomator": {"clickable": "false", "content-desc": ""}})
+    text = ViewNode("android.widget.TextView", text="Settings", bounds=Rect(160, 40, 600, 100),
+                    props={"uiautomator": {"content-desc": ""}})
+    row = ViewNode("android.widget.LinearLayout", id="row", bounds=Rect(0, 0, 1080, 144),
+                   props={"uiautomator": {"clickable": "true", "content-desc": ""}}, children=[icon, text])
+    assert checks(snap_of(row)) == []
+
+
+def test_off_screen_subtree_reported_once():
+    page = ViewNode("a.Page", id="page", bounds=Rect(1080, 0, 2160, 2400),
+                    children=[ViewNode("a.Text", id=f"t{i}", bounds=Rect(1100, i * 100, 2000, i * 100 + 90))
+                              for i in range(5)])
+    assert checks(snap_of(page)) == [("off-screen", "page")]
+
+
+def test_clipping_rule_only_applies_to_uiautomator_only_nodes():
+    # a merged view's bounds come from dumpsys, so they are real even at the window edge
+    merged = ViewNode("a.NavItem", id="nav", bounds=Rect(0, 2100, 100, 2167), sources=["dumpsys", "uiautomator"],
+                      props={"uiautomator": {"clickable": "true", "content-desc": "Home"}})
+    snap = snap_of(merged, density=480)
+    snap.root.props = {"uiautomator": {"bounds": "[0,0][1080,2167]"}}
+    assert checks(snap) == [("touch-target", "nav")]

@@ -6,9 +6,10 @@ from PIL import Image
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import DataTable, Footer, Header, Input, Tree
+from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
 from textual.widgets.tree import TreeNode
 
 from layoutcli.checks import run_checks
@@ -16,6 +17,7 @@ from layoutcli.format import node_label, node_rows
 from layoutcli.model import Snapshot, ViewNode
 from layoutcli.screenshot import render_screenshot
 from layoutcli.search import find_matches, keep_set
+from layoutcli.snapshot_io import load_apk_index
 from layoutcli.wireframe import render_wireframe
 
 
@@ -57,6 +59,33 @@ class Wireframe(Widget):
                                 size.width, size.height, self.selected)
 
 
+class LayoutXmlScreen(ModalScreen):
+    """Decoded layout XML from the APK, with the selected view's line highlighted."""
+
+    BINDINGS = [Binding("escape", "dismiss", "Close"), Binding("q", "dismiss", "Close")]
+    DEFAULT_CSS = """
+    LayoutXmlScreen { align: center middle; }
+    #xml { width: 90%; height: 85%; border: round $primary; background: $surface; }
+    """
+
+    def __init__(self, title: str, xml: str, view_id: str):
+        super().__init__()
+        self.title_text = title
+        self.body = Text()
+        marker = f'android:id="@id/{view_id}"'
+        for i, line in enumerate(xml.splitlines()):
+            if i:
+                self.body.append("\n")
+            self.body.append(line, style="bold reverse" if marker in line else "")
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="xml"):
+            yield Static(self.body)
+
+    def on_mount(self) -> None:
+        self.query_one("#xml").border_title = self.title_text
+
+
 class LayoutApp(App):
     TITLE = "layoutcli"
     CSS = """
@@ -75,6 +104,7 @@ class LayoutApp(App):
         Binding("f", "filter", "Filter"),
         Binding("p", "preview", "Preview"),
         Binding("c", "checks", "Checks"),
+        Binding("x", "layout_xml", "Layout XML"),
         Binding("escape", "close_search", "Close", show=False),
     ]
 
@@ -86,6 +116,7 @@ class LayoutApp(App):
         self._warned = {i.node for i in self.issues if i.severity == "warning"}
         self._tree_nodes: dict[ViewNode, TreeNode[ViewNode]] = {}
         self._image = _load_image(snapshot, base_dir)
+        self._apk = load_apk_index(base_dir) if base_dir is not None else None
         self._query = ""
         self._matches: list[ViewNode] = []
         self._match_index = -1
@@ -222,6 +253,15 @@ class LayoutApp(App):
         issues.display = not issues.display
         self.query_one("#props", DataTable).display = not issues.display
         (issues if issues.display else self.query_one("#tree", Tree)).focus()
+
+    def action_layout_xml(self) -> None:
+        node = self.selected
+        files = self._apk.ids.get(node.id, []) if self._apk and node is not None and node.id else []
+        file = next((f for f in files if f in self._apk.layouts), None)
+        if file is None:
+            self.notify("no layout XML for this view (capture with --apk PATH or --apk device)")
+            return
+        self.push_screen(LayoutXmlScreen(f"{file}  (#{node.id})", self._apk.layouts[file], node.id))
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id == "issues":

@@ -5,8 +5,9 @@ from helpers import views_raw, views_snapshot
 from PIL import Image
 from textual.widgets import DataTable, Tree
 
+from layoutcli.apk import ApkIndex
 from layoutcli.checks import run_checks
-from layoutcli.snapshot_io import save_capture
+from layoutcli.snapshot_io import save_apk_index, save_capture
 from layoutcli.tui.app import LayoutApp
 
 
@@ -188,4 +189,32 @@ def test_empty_search_while_filtered_clears_filter():
         await pilot.pause()
         assert sum(1 for _ in tree_nodes(tree.root)) == total
         assert app._filtered is False
+    run_app(views_snapshot(), scenario)
+
+
+def test_x_shows_layout_xml_for_selected_view(tmp_path):
+    snap = views_snapshot()
+    save_capture(views_raw(), snap, tmp_path)
+    save_apk_index(ApkIndex(ids={"toolbar": ["res/layout/activity_main.xml"]},
+                            layouts={"res/layout/activity_main.xml":
+                                     '<LinearLayout>\n    <TextView android:id="@id/toolbar"/>\n</LinearLayout>'}),
+                   tmp_path)
+
+    async def scenario(app, pilot):
+        await pilot.press("slash", *"toolbar", "enter", "x")
+        await pilot.pause()
+        screen = app.screen
+        assert screen.__class__.__name__ == "LayoutXmlScreen"
+        assert 'android:id="@id/toolbar"' in screen.body.plain
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app.screen.__class__.__name__ != "LayoutXmlScreen"
+    run_app(snap, scenario, base_dir=tmp_path)
+
+
+def test_x_without_mapping_only_notifies():
+    async def scenario(app, pilot):
+        await pilot.press("x")
+        await pilot.pause()
+        assert app.screen.__class__.__name__ != "LayoutXmlScreen"
     run_app(views_snapshot(), scenario)

@@ -60,6 +60,15 @@ def test_compose_label_uses_component_kind_instead_of_class():
         "Selector 984x170 ⚠"
 
 
+def test_compose_label_shows_the_real_call_chain_when_named():
+    node = ViewNode("android.view.View", bounds=Rect(0, 211, 984, 270), sources=["uiautomator"],
+                    props={"uiautomator": {},
+                           "compose": {"name": "RadioItem",
+                                       "path": "QuestionContent > RadioGroup > RadioItem"}})
+    assert node_label(node, in_compose=True).plain == \
+        "QuestionContent > RadioGroup > RadioItem 984x59"
+
+
 def test_compose_label_for_plain_semantics_nodes():
     text = ViewNode("android.widget.TextView", text="Всегда", bounds=Rect(0, 0, 154, 59), sources=["uiautomator"])
     image = ViewNode("android.widget.ImageView", bounds=Rect(0, 0, 10, 10), sources=["uiautomator"],

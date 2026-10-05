@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import zipfile
@@ -13,6 +14,10 @@ from rich.markup import escape
 
 from alayout import __version__
 from alayout.adb import Adb, AdbError, find_adb
+from alayout.agent import AgentError
+from alayout.agent import collect as collect_names
+from alayout.agent import finish as finish_names
+from alayout.agentbuild import AGENT_PACKAGE, SigningKey, signing_override
 from alayout.apk import ApkError, apply_index, build_index, find_aapt2
 from alayout.build import BuildError, build_snapshot
 from alayout.capture import capture_raw, pull_apks
@@ -37,6 +42,17 @@ AdbOpt = Annotated[Optional[str], typer.Option("--adb", help="Path to adb or its
 ApkOpt = Annotated[Optional[str], typer.Option(
     "--apk", help="Map view ids to layout XML: the app's APK, a folder of APKs (base + splits), "
                   "or 'device' to pull them (needs SDK build-tools).")]
+ComposeOpt = Annotated[bool, typer.Option(
+    "--compose", help="Show the real composable names: run an agent inside the debuggable app "
+                      "(restarts it and asks you to open the screen; needs a JDK + SDK build-tools).")]
+KeystoreOpt = Annotated[Optional[str], typer.Option(
+    "--keystore", help="Keystore to sign the --compose agent with (must match the app's signing "
+                       "key); overrides the auto-detected debug/alayout keys.")]
+KeyAliasOpt = Annotated[Optional[str], typer.Option("--key-alias", help="Key alias in --keystore.")]
+KeyPasswordOpt = Annotated[Optional[str], typer.Option(
+    "--key-password", help="Password of the key in --keystore.")]
+StorePasswordOpt = Annotated[Optional[str], typer.Option(
+    "--key-store-password", help="Password of --keystore itself (defaults to --key-password).")]
 
 
 def _utf8_output() -> None:
@@ -51,6 +67,12 @@ def _utf8_output() -> None:
 
 def _make_adb(adb_path: str | None, serial: str | None) -> Adb:
     return Adb.connect(find_adb(adb_path), serial)
+
+
+def _debug_enabled() -> bool:
+    """ALAYOUT_DEBUG=1 makes the compose agent add its `debug` object (reflection inventory, group
+    counters, node samples) to raw/compose.json -- how the name extraction is diagnosed."""
+    return os.environ.get("ALAYOUT_DEBUG", "").strip().lower() not in ("", "0", "false", "no")
 
 
 SNAPSHOTS_DIR = Path("layout-snapshots")
@@ -80,10 +102,11 @@ def _choose_snapshot(title: str = "Snapshot") -> Path | None:
 
 
 def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None,
-                      title: str = "Snapshot", apk: str | None = None) -> Path:
+                      title: str = "Snapshot", apk: str | None = None,
+                      compose: bool = False, signing: SigningKey | None = None) -> Path:
     directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot(title)
     if directory is None:
-        return _capture(adb, serial, None, apk)
+        return _capture(adb, serial, None, apk, compose, signing)
     if apk:
         err_console.print("[yellow]warning:[/] --apk is ignored for an existing snapshot "
                           "(it applies to new captures)")
@@ -123,9 +146,31 @@ def _apk_index(adb: Adb, apk: str, package: str | None):
         return build_index(pull_apks(adb, package, Path(tmp)), aapt2)
 
 
-def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: str | None = None) -> Path:
+def _wait_for_screen(package: str, activity: str | None) -> None:
+    """The agent can only read what the app is showing, so the user chooses the window."""
+    if not sys.stdin.isatty():
+        console.print("[dim]not a terminal: capturing the screen the app restarts into[/]")
+        return
+    starts = f" (it restarts in {escape(activity)})" if activity else ""
+    console.print(f"[bold]{escape(package)}[/] is running with the alayout agent attached{starts}.")
+    console.print("Open the screen you want to inspect on the device.")
+    typer.prompt("Press Enter to capture it", default="", show_default=False)
+
+
+def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: str | None = None,
+             compose: bool = False, signing: SigningKey | None = None) -> Path:
     adb = _make_adb(adb_path, serial)
+    session = None
+    if compose:
+        try:
+            session = collect_names(adb, wait=_wait_for_screen, log=console.print, signing=signing,
+                                    debug=_debug_enabled())
+        except (AgentError, AdbError) as e:
+            err_console.print(f"[yellow]composable names:[/] {escape(str(e))}")
     raw = capture_raw(adb)
+    if session is not None:
+        raw.compose_json = session.dump
+        finish_names(adb, session)
     snap = build_snapshot(raw, captured_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
     index = None
     if apk:
@@ -143,10 +188,21 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
     return out_dir
 
 
-def _global(ctx: typer.Context, serial: str | None, adb: str | None, apk: str | None):
+def _global(ctx: typer.Context, serial: str | None, adb: str | None, apk: str | None,
+            compose: bool = False):
     """Options given before the command (alayout --apk device capture) fill in unset ones."""
     given = ctx.obj or {}
-    return serial or given.get("serial"), adb or given.get("adb"), apk or given.get("apk")
+    return (serial or given.get("serial"), adb or given.get("adb"), apk or given.get("apk"),
+            compose or bool(given.get("compose")))
+
+
+def _signing(ctx: typer.Context, keystore: str | None, alias: str | None,
+             key_password: str | None, store_password: str | None) -> SigningKey | None:
+    """The signing key chosen with --keystore/--key-* (on the command or before it), or None."""
+    given = ctx.obj or {}
+    return signing_override(keystore or given.get("keystore"), alias or given.get("key_alias"),
+                            key_password or given.get("key_password"),
+                            store_password or given.get("key_store_password"))
 
 
 def _self_test(directory: Path) -> int:
@@ -195,6 +251,8 @@ def _fail(error: Exception) -> typer.Exit:
 
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
+         compose: ComposeOpt = False, keystore: KeystoreOpt = None, key_alias: KeyAliasOpt = None,
+         key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None,
          version: Annotated[bool, typer.Option("--version", help="Print the version and exit.")] = False,
          self_test: Annotated[Optional[Path], typer.Option(
              "--self-test", metavar="SNAPSHOT_DIR",
@@ -207,10 +265,13 @@ def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: 
         raise typer.Exit()
     if self_test is not None:
         raise typer.Exit(code=_self_test(self_test))
-    ctx.obj = {"serial": serial, "adb": adb, "apk": apk}  # also accepted before the command
+    ctx.obj = {"serial": serial, "adb": adb, "apk": apk, "compose": compose,  # also before the command
+               "keystore": keystore, "key_alias": key_alias, "key_password": key_password,
+               "key_store_password": key_store_password}
     if ctx.invoked_subcommand is None:
+        signing = signing_override(keystore, key_alias, key_password, key_store_password)
         try:
-            directory = _capture(adb, serial, None, apk)
+            directory = _capture(adb, serial, None, apk, compose, signing)
             snap = load_snapshot(directory)
         except (AdbError, BuildError, SnapshotError, OSError) as e:
             raise _fail(e)
@@ -219,12 +280,15 @@ def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: 
 
 @app.command()
 def capture(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
+            compose: ComposeOpt = False, keystore: KeystoreOpt = None, key_alias: KeyAliasOpt = None,
+            key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None,
             out: Annotated[Optional[Path], typer.Option("--out", "-o", help="Snapshot directory.")] = None
             ) -> None:
     """Capture the foreground screen's layout into a snapshot directory."""
-    serial, adb, apk = _global(ctx, serial, adb, apk)
+    signing = _signing(ctx, keystore, key_alias, key_password, key_store_password)
+    serial, adb, apk, compose = _global(ctx, serial, adb, apk, compose)
     try:
-        _capture(adb, serial, out, apk)
+        _capture(adb, serial, out, apk, compose, signing)
     except (AdbError, BuildError, OSError) as e:
         raise _fail(e)
 
@@ -232,11 +296,15 @@ def capture(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, ap
 @app.command()
 def inspect(ctx: typer.Context, snapshot_dir: Annotated[Optional[Path], typer.Argument(
                 help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
-            serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None) -> None:
+            serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
+            compose: ComposeOpt = False, keystore: KeystoreOpt = None, key_alias: KeyAliasOpt = None,
+            key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None) -> None:
     """Open a snapshot in the interactive inspector."""
-    serial, adb, apk = _global(ctx, serial, adb, apk)
+    signing = _signing(ctx, keystore, key_alias, key_password, key_store_password)
+    serial, adb, apk, compose = _global(ctx, serial, adb, apk, compose)
     try:
-        directory = _resolve_snapshot(snapshot_dir, adb, serial, apk=apk)
+        directory = _resolve_snapshot(snapshot_dir, adb, serial, apk=apk, compose=compose,
+                                      signing=signing)
         snap = load_snapshot(directory)
     except (AdbError, BuildError, SnapshotError, OSError) as e:
         raise _fail(e)
@@ -248,7 +316,7 @@ def check(ctx: typer.Context, snapshot_dir: Annotated[Optional[Path], typer.Argu
               help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
           serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Report layout problems: small touch targets, missing labels, overlaps, deep nesting..."""
-    serial, adb, _ = _global(ctx, serial, adb, None)
+    serial, adb, _, _ = _global(ctx, serial, adb, None)
     try:
         snap = load_snapshot(_resolve_snapshot(snapshot_dir, adb, serial))
     except (AdbError, BuildError, SnapshotError) as e:
@@ -279,7 +347,7 @@ def diff(ctx: typer.Context, first: Annotated[Optional[Path], typer.Argument(hel
          second: Annotated[Optional[Path], typer.Argument(help="Newer snapshot (picked when omitted).")] = None,
          serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Show views added, removed and changed between two snapshots."""
-    serial, adb, _ = _global(ctx, serial, adb, None)
+    serial, adb, _, _ = _global(ctx, serial, adb, None)
     try:
         dir_a = _resolve_snapshot(first, adb, serial, "First snapshot")
         dir_b = _resolve_snapshot(second, adb, serial, "Second snapshot")
@@ -345,3 +413,18 @@ def composables(apk: ApkOpt = None,
         for c in group:
             where = f"~{c.line}" if c.line else ""
             console.print(f"    {escape(c.name):<40} [dim]{where}[/]")
+
+
+@app.command()
+def clean(serial: SerialOpt = None, adb: AdbOpt = None) -> None:
+    """Uninstall the --compose agent (com.alayout.agent) from the device."""
+    try:
+        device = _make_adb(adb, serial)
+        listing = device.exec_out(f"pm list packages {AGENT_PACKAGE}").decode("utf-8", "replace")
+        installed = AGENT_PACKAGE in listing
+        if installed:
+            device.uninstall(AGENT_PACKAGE)
+    except (AdbError, OSError) as e:
+        raise _fail(e)
+    console.print(f"removed {escape(AGENT_PACKAGE)}" if installed
+                  else f"{escape(AGENT_PACKAGE)} was not installed")

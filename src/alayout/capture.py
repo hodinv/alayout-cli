@@ -24,6 +24,7 @@ class RawCapture:
     screenshot_png: bytes | None = None
     wm_size: str | None = None
     wm_density: str | None = None
+    compose_json: str | None = None  # the agent's answer: real composable names (see alayout.agent)
     errors: dict[str, str] = field(default_factory=dict)
 
 

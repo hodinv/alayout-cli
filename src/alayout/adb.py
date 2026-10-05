@@ -54,7 +54,26 @@ def _default_sdk_dirs(env: Mapping[str, str]) -> list[Path]:
     return dirs
 
 
+def sdk_dirs(adb_path: Path | None = None, env: Mapping[str, str] | None = None,
+             cwd: Path | None = None) -> list[Path]:
+    """Android SDK roots worth searching, most specific first: the SDK `adb` came from,
+    ANDROID_HOME/ANDROID_SDK_ROOT, `sdk.dir` in local.properties, the per-OS defaults."""
+    env = os.environ if env is None else env
+    roots: list[Path] = []
+    if adb_path is not None:
+        roots.append(Path(adb_path).resolve().parent.parent)  # adb lives in platform-tools
+    for var in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
+        if env.get(var):
+            roots.append(Path(env[var]))
+    local = sdk_dir_from_local_properties(Path.cwd() if cwd is None else cwd)
+    if local:
+        roots.append(local)
+    roots += _default_sdk_dirs(env)  # adb may come from Homebrew or a Linux package instead
+    return roots
+
+
 def find_adb(
+
     explicit: str | None = None,
     env: Mapping[str, str] | None = None,
     cwd: Path | None = None,
@@ -164,3 +183,15 @@ class Adb:
             detail = (err or out).decode("utf-8", "replace").strip()
             raise AdbError(f"`{cmd}` failed: {detail}")
         return out
+
+    def install(self, apk: Path, timeout: float = 300.0) -> str:
+        """`adb install -r -t`: replace an existing copy, allow test-only packages."""
+        code, out, err = self._runner(
+            [str(self.adb_path), "-s", self.serial, "install", "-r", "-t", str(apk)], timeout)
+        detail = (out or err).decode("utf-8", "replace").strip()
+        if code != 0:
+            raise AdbError(f"installing {apk.name} failed: {detail or code}")
+        return detail
+
+    def uninstall(self, package: str, timeout: float = 120.0) -> None:
+        self._runner([str(self.adb_path), "-s", self.serial, "uninstall", package], timeout)

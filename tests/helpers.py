@@ -28,6 +28,8 @@ class FakeAdb:
         self.responses = responses
         self.serial = serial
         self.calls: list[str] = []
+        self.installed: list[Path] = []
+        self.uninstalled: list[str] = []
 
     def exec_out(self, cmd: str, timeout: float = 30.0) -> bytes:
         self.calls.append(cmd)
@@ -35,6 +37,13 @@ class FakeAdb:
         if isinstance(response, Exception):
             raise response
         return response
+
+    def install(self, apk: Path, timeout: float = 300.0) -> str:
+        self.installed.append(apk)
+        return "Success"
+
+    def uninstall(self, package: str, timeout: float = 120.0) -> None:
+        self.uninstalled.append(package)
 
 
 def views_responses() -> dict:

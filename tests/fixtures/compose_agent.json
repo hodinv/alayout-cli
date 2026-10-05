@@ -1,0 +1,54 @@
+{
+  "agent": 1,
+  "request": 1791223897,
+  "package": "com.quitsmoke.tracker",
+  "tooling": true,
+  "windows": [
+    {
+      "root": "com.android.internal.policy.DecorView",
+      "activity": "com.quitsmoke.tracker.MainActivity",
+      "left": 0,
+      "top": 0,
+      "composeViews": [
+        {
+          "view": "androidx.compose.ui.platform.AndroidComposeView",
+          "bounds": [0, 0, 1080, 2400],
+          "nodes": [
+            {
+              "bounds": [0, 0, 1080, 2400],
+              "rect": "window",
+              "sourceInfo": "C(MainScreen)88@4250L1665:MainScreen.kt#tdbmv6",
+              "path": ["NavHost", "MainScreen"]
+            },
+            {
+              "bounds": [48, 667, 528, 1197],
+              "rect": "window",
+              "path": ["Column", "Layout", "ReusableComposeNode", "Row", "Layout", "ReusableComposeNode", "MoneyCard", "Card", "Surface", "CompositionLocalProvider", "Box", "Layout", "ReusableComposeNode"]
+            },
+            {
+              "bounds": [86, 715, 490, 774],
+              "rect": "window",
+              "path": ["MoneyCard", "Card", "Surface", "CompositionLocalProvider", "Box", "Layout", "ReusableComposeNode", "Column", "Layout", "ReusableComposeNode", "Text", "BasicText", "Layout", "ReusableComposeNode"]
+            },
+            {
+              "bounds": [711, 884, 873, 1046],
+              "rect": "window",
+              "path": ["LungFunctionCard", "Card", "Surface", "CompositionLocalProvider", "Box", "Layout", "ReusableComposeNode", "Column", "Layout", "ReusableComposeNode", "ProgressCircle", "Image", "Layout", "ReusableComposeNode"]
+            },
+            {
+              "bounds": [0, 2018, 344, 2258],
+              "rect": "window",
+              "path": ["MainBottomNavigation", "NavigationBar", "Surface", "CompositionLocalProvider", "Box", "Layout", "ReusableComposeNode", "Row", "Layout", "ReusableComposeNode", "NavigationBarItem", "Box", "Layout", "ReusableComposeNode", "NavigationBarItemLayout", "Layout", "ReusableComposeNode"]
+            },
+            {
+              "bounds": [0, 0, 0, 0],
+              "rect": "window",
+              "path": ["Column", "Layout", "ReusableComposeNode", "Spacer", "Layout", "ReusableComposeNode"]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

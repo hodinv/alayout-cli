@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Iterable
 
 from alayout.checks import is_clickable
 from alayout.model import ViewNode
+
+if TYPE_CHECKING:
+    from alayout.agent import ComposeHit
 
 TOGGLE_CLASSES = ("CheckBox", "Switch", "RadioButton", "ToggleButton")
 
@@ -140,3 +144,92 @@ def infer_components(root: ViewNode) -> dict[ViewNode, Component]:
                 c = found[node]
                 found[node] = Component(c.kind, c.label, c.state, (index, len(members)))
     return found
+
+
+STRUCTURAL_COMPOSABLES = frozenset({
+    "Layout", "ReusableComposeNode", "ReusableContent", "SubcomposeLayout", "LazyLayout",
+    "SaveableStateProvider", "LazySaveableStateHolderProvider", "LocalOwnersProvider",
+    "CompositionLocalProvider", "ProvideCommonCompositionLocals", "ProvideAndroidCompositionLocals",
+    "ProvideContentColorTextStyle", "ProvideTextStyle", "Content", "BasicText", "BasicTextField",
+})
+"""Pass-through wrappers and private implementations: pure plumbing, dropped from the displayed call
+path so the composables the app wrote stand out (`BasicText`/`BasicTextField` are the internals of
+`Text`/`TextField`)."""
+
+
+GENERIC_COMPOSABLES = frozenset({
+    "AndroidView", "BasicText", "BasicTextField", "Box", "Column", "CompositionLocalProvider",
+    "Divider", "FlowColumn", "FlowRow", "HorizontalDivider", "Icon", "Image", "Key", "LazyColumn",
+    "LazyHorizontalGrid", "LazyRow", "LazyVerticalGrid", "ProvideContentScale", "ProvideTextStyle",
+    "Row", "Scaffold", "Spacer", "Surface", "Text", "VerticalDivider",
+})
+"""Compose's own building blocks: their name repeats what the semantics already tell us, so a name
+the app wrote itself is preferred when both drew the same box."""
+
+MIN_NAME_OVERLAP = 0.8
+
+
+def _fits_here(hits: list["ComposeHit"], bounds) -> list["ComposeHit"]:
+    """The reported nodes that belong to this box: same bounds first, then the ones that cover it."""
+    exact = [hit for hit in hits if hit.bounds == bounds]
+    if exact:
+        return sorted(exact, key=lambda hit: (hit.name in GENERIC_COMPOSABLES, len(hit.path),
+                                              hit.name or ""))
+    area = max(1, bounds.width * bounds.height)
+    scored: list[tuple[float, "ComposeHit"]] = []
+    for hit in hits:
+        other = hit.bounds
+        if other is None:
+            continue
+        width = min(bounds.right, other.right) - max(bounds.left, other.left)
+        height = min(bounds.bottom, other.bottom) - max(bounds.top, other.top)
+        if width <= 0 or height <= 0:
+            continue
+        cover = (width * height) / min(area, max(1, other.width * other.height))
+        if cover >= MIN_NAME_OVERLAP:
+            scored.append((cover, hit))
+    scored.sort(key=lambda item: (-item[0], item[1].name in GENERIC_COMPOSABLES, len(item[1].path)))
+    return [hit for _, hit in scored]
+
+
+def apply_compose_names(root: ViewNode, hits: Iterable["ComposeHit"]) -> int:
+    """Write the composable names the agent read inside the app onto the nodes of the snapshot.
+
+    A layout node and the semantics node uiautomator reports for it share their box on the screen,
+    so that is how the two are joined; `props["compose"]` then carries name, file, line and the call
+    path. Returns how many nodes got a name.
+    """
+    named = [hit for hit in hits
+             if hit.name and hit.bounds and hit.bounds.width > 0 and hit.bounds.height > 0]
+    attached = 0
+    for node in compose_nodes(root):
+        if node.bounds is None or node.bounds.width <= 0 or node.bounds.height <= 0:
+            continue
+        matches = _fits_here(named, node.bounds)
+        if not matches:
+            continue
+        best = matches[0]
+        props = {"name": best.name}
+        if best.file:
+            props["file"] = best.file
+        if best.line is not None:
+            props["line"] = str(best.line)
+        chain = _call_chain(best.path)
+        if len(chain) > 1:
+            props["path"] = " > ".join(chain)
+        node.props["compose"] = props
+        attached += 1
+    return attached
+
+
+def _call_chain(path: Iterable[str]) -> list[str]:
+    """The composables the app wrote, in call order: the raw path with pure plumbing dropped and
+    runs of the same name collapsed (`QuestionWithSelectionScreen > ScaffoldScreen > AdaptiveFitLayout
+    > QuestionContent > Column > RadioGroup > RadioItem`)."""
+    chain: list[str] = []
+    for part in path:
+        if part in STRUCTURAL_COMPOSABLES:
+            continue
+        if not chain or chain[-1] != part:
+            chain.append(part)
+    return chain

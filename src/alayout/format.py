@@ -26,8 +26,17 @@ def _clip(s: str, n: int) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+def _clip_end(s: str, n: int) -> str:
+    """Clip keeping the tail: a call chain's most specific composable is at the end."""
+    return s if len(s) <= n else "…" + s[-(n - 1):]
+
+
 def compose_kind(node: ViewNode, component: Component | None) -> tuple[str, str | None]:
-    """How a Compose semantics node is shown: inferred kind and label instead of its accessibility class."""
+    """How a Compose semantics node is shown: the composable that drew it when the app told us
+    (capture with --compose), otherwise the kind inferred from semantics."""
+    name = node.props.get("compose", {}).get("name")
+    if name:
+        return name, (component.label if component is not None else node.text) or None
     if component is not None:
         return component.kind, component.label
     cls = node.short_class
@@ -41,10 +50,16 @@ def compose_kind(node: ViewNode, component: Component | None) -> tuple[str, str 
 
 
 def _compose_label(node: ViewNode, warning: bool, component: Component | None) -> Text:
+    compose = node.props.get("compose", {})
+    named = compose.get("name")
     kind, text = compose_kind(node, component)
-    label = Text(kind, style="bold cyan")
+    # show the real composable call chain (tail-clipped so the most specific name stays visible)
+    headline = _clip_end(compose["path"], 48) if named and "path" in compose else kind
+    label = Text(headline, style="bold bright_cyan" if named else "bold cyan")
     if text:
         label.append(f' "{_clip(text, 30)}"', style="green")
+    if named and component is not None:
+        label.append(f" ⟨{component.kind}⟩", style="cyan")
     if component is not None and component.state:
         label.append(" [" + ", ".join(component.state) + "]", style="yellow")
     if node.bounds is not None:

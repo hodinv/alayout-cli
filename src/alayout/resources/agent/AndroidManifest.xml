@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- alayout's in-process Compose agent.
+
+`am instrument` only runs an Instrumentation inside another app's process when that app is named
+by android:targetPackage, so the APK is linked for one app at a time: alayout.agentbuild replaces
+the placeholder below before running aapt2 (see src/alayout/agentbuild.py). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.alayout.agent"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk
+        android:minSdkVersion="21"
+        android:targetSdkVersion="33" />
+
+    <application android:label="alayout agent" />
+
+    <instrumentation
+        android:name="com.alayout.agent.AlayoutAgent"
+        android:label="alayout composable names"
+        android:targetPackage="@TARGET_PACKAGE@" />
+</manifest>

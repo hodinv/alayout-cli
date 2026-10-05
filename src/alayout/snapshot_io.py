@@ -20,7 +20,8 @@ def save_capture(raw: RawCapture, snap: Snapshot, out_dir: Path) -> None:
     raw_dir = out_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     for name, content in (("dumpsys.txt", raw.dumpsys_text), ("uiautomator.xml", raw.uiautomator_xml),
-                          ("wm_size.txt", raw.wm_size), ("wm_density.txt", raw.wm_density)):
+                          ("wm_size.txt", raw.wm_size), ("wm_density.txt", raw.wm_density),
+                          ("compose.json", raw.compose_json)):
         if content is not None:
             (raw_dir / name).write_text(content, encoding="utf-8")
         else:

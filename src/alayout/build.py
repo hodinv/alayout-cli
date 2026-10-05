@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 
+from alayout.agent import AgentError, parse_agent_dump
 from alayout.capture import RawCapture
+from alayout.compose import apply_compose_names, compose_nodes
 from alayout.merge import merge, select_window
 from alayout.model import Snapshot, ViewNode
 from alayout.parse.dumpsys import parse_dumpsys
@@ -47,12 +49,31 @@ def build_snapshot(raw: RawCapture, captured_at: str) -> Snapshot:
     if rejected and ui_roots:
         caps["uiautomator"] = rejected
     root = merge(dump, [window] if window is not None else [])
+    _apply_names(raw, root, caps)
     screen = _screen_size(parse_wm_size(raw.wm_size or ""), root)
     package = dump.package if dump else root.props.get("uiautomator", {}).get("package")
     return Snapshot(
         root=root, screen=screen, density=parse_wm_density(raw.wm_density or ""),
         package=package, activity=dump.activity if dump else None,
         device=dict(raw.device), captured_at=captured_at, capabilities=caps)
+
+
+def _apply_names(raw: RawCapture, root: ViewNode, caps: dict[str, str]) -> None:
+    """The composable names the agent read inside the app, or why they are missing."""
+    if not raw.compose_json:
+        if raw.errors.get("compose"):
+            caps["compose"] = raw.errors["compose"]
+        return
+    try:
+        dump = parse_agent_dump(raw.compose_json)
+    except AgentError as e:
+        caps["compose"] = str(e)
+        return
+    named = apply_compose_names(root, dump.hits)
+    total = len(compose_nodes(root))
+    caps["compose"] = f"ok ({named} of {total} Compose views named)" if total else f"ok ({named})"
+    if dump.errors:
+        caps["compose"] += "; " + "; ".join(dump.errors)
 
 
 def _screen_size(wm: tuple[int, int] | None, root: ViewNode) -> tuple[int, int]:

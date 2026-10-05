@@ -102,6 +102,82 @@ def test_help_still_lists_commands():
     assert "capture" in result.output and "inspect" in result.output
 
 
+def test_clean_uninstalls_the_agent_when_present(monkeypatch):
+    adb = FakeAdb({"pm list packages com.alayout.agent": b"package:com.alayout.agent\n"})
+    monkeypatch.setattr(cli, "_make_adb", lambda a, s: adb)
+    result = runner.invoke(cli.app, ["clean"])
+    assert result.exit_code == 0
+    assert adb.uninstalled == ["com.alayout.agent"]
+    assert "removed com.alayout.agent" in result.output
+
+
+def test_clean_is_quiet_when_agent_absent(monkeypatch):
+    adb = FakeAdb({"pm list packages com.alayout.agent": b""})
+    monkeypatch.setattr(cli, "_make_adb", lambda a, s: adb)
+    result = runner.invoke(cli.app, ["clean"])
+    assert result.exit_code == 0
+    assert adb.uninstalled == []
+    assert "was not installed" in result.output
+
+
+def test_compose_flag_reaches_capture(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli, "_capture",
+                        lambda adb, serial, out, apk=None, compose=False, signing=None:
+                        seen.update(compose=compose, signing=signing) or tmp_path)
+    result = runner.invoke(cli.app, ["capture", "--compose"])
+    assert result.exit_code == 0
+    assert seen["compose"] is True and seen["signing"] is None
+
+
+def test_alayout_debug_env_enables_agent_debug(tmp_path, monkeypatch):
+    seen = {}
+
+    class FakeSession:
+        dump = "{}"
+
+    monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
+    monkeypatch.setattr(cli, "collect_names",
+                        lambda adb, wait, log, signing=None, debug=False:
+                        seen.update(debug=debug) or FakeSession())
+    monkeypatch.setattr(cli, "finish_names", lambda adb, session: None)
+    monkeypatch.setenv("ALAYOUT_DEBUG", "1")
+    result = runner.invoke(cli.app, ["capture", "--compose", "-o", str(tmp_path / "out")])
+    assert result.exit_code == 0, result.output
+    assert seen["debug"] is True
+
+
+def test_compose_without_debug_env_stays_quiet(tmp_path, monkeypatch):
+    seen = {}
+
+    class FakeSession:
+        dump = "{}"
+
+    monkeypatch.setattr(cli, "_make_adb", lambda adb, serial: FakeAdb(views_responses()))
+    monkeypatch.setattr(cli, "collect_names",
+                        lambda adb, wait, log, signing=None, debug=False:
+                        seen.update(debug=debug) or FakeSession())
+    monkeypatch.setattr(cli, "finish_names", lambda adb, session: None)
+    monkeypatch.delenv("ALAYOUT_DEBUG", raising=False)
+    result = runner.invoke(cli.app, ["capture", "--compose", "-o", str(tmp_path / "out")])
+    assert result.exit_code == 0, result.output
+    assert seen["debug"] is False
+
+
+def test_keystore_flags_build_a_signing_override(tmp_path, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(cli, "_capture",
+                        lambda adb, serial, out, apk=None, compose=False, signing=None:
+                        seen.update(signing=signing) or tmp_path)
+    result = runner.invoke(cli.app, ["capture", "--compose", "--keystore", "my.ks",
+                                     "--key-alias", "rel", "--key-password", "pw"])
+    assert result.exit_code == 0
+    key = seen["signing"]
+    assert key is not None and key.alias == "rel"
+    assert key.key_password == "pw" and key.store_password == "pw"
+    assert str(key.keystore) == "my.ks"
+
+
 def _saved(tmp_path, name, captured_at, activity):
     snap = views_snapshot()
     snap.captured_at = captured_at

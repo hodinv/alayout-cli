@@ -8,7 +8,9 @@ from alayout.model import ViewNode
 def node_matches(node: ViewNode, query: str, alias: str | None = None) -> bool:
     q = query.casefold()
     fields = (node.class_name, node.id or "", node.text or "",
-              node.props.get("uiautomator", {}).get("content-desc", ""), alias or "")
+              node.props.get("uiautomator", {}).get("content-desc", ""),
+              node.props.get("compose", {}).get("name", ""),
+              node.props.get("compose", {}).get("path", ""), alias or "")
     return any(q in f.casefold() for f in fields)
 
 

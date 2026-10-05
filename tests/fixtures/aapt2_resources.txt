@@ -1,0 +1,21 @@
+Binary APK
+Package name=com.example.demo id=7f
+  type dimen id=01 entryCount=1
+    resource 0x7f010000 dimen/screen_padding
+      () 16.000000dp
+  type id id=02 entryCount=4
+    resource 0x7f020000 id/fab_small
+      () (id)
+    resource 0x7f020001 id/item_title
+      () (id)
+    resource 0x7f020002 id/root
+      () (id)
+    resource 0x7f020003 id/toolbar
+      () (id)
+  type layout id=03 entryCount=2
+    resource 0x7f030000 layout/activity_main
+      () (file) res/layout/activity_main.xml type=XML
+      (v1) (file) res/layout-v1/activity_main.xml type=XML
+    resource 0x7f030001 layout/item_row
+      () (file) res/layout/item_row.xml type=XML
+      (v1) (file) res/layout-v1/item_row.xml type=XML

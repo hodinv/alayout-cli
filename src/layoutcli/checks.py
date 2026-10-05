@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from layoutcli.format import dp
 from layoutcli.model import Rect, Snapshot, ViewNode
+from layoutcli.parse.uiautomator import parse_bounds
 
 MAX_DEPTH = 10
 MIN_TOUCH_DP = 48
@@ -36,6 +37,17 @@ def _has_text(node: ViewNode) -> bool:
     return any(n.text or n.props.get("uiautomator", {}).get("content-desc") for n, _ in node.walk())
 
 
+def _clipped(b: Rect, window: Rect | None, screen: Rect) -> bool:
+    """True when b touches an edge where uiautomator clipped the window short of the screen
+    (e.g. above the navigation bar of an edge-to-edge app): its real size is unknown."""
+    if window is None:
+        return False
+    return ((b.bottom >= window.bottom and window.bottom < screen.bottom)
+            or (b.right >= window.right and window.right < screen.right)
+            or (b.top <= window.top and window.top > screen.top)
+            or (b.left <= window.left and window.left > screen.left))
+
+
 def _name(node: ViewNode) -> str:
     return node.short_class + (f"#{node.id}" if node.id else "")
 
@@ -62,6 +74,7 @@ def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
             walk(child, depth + 1, ancestors + (node,), True)
 
     walk(snap.root, 0, (), True)
+    window = parse_bounds(snap.root.props.get("uiautomator", {}).get("bounds", ""))
 
     for node, ancestors in visible:
         b = node.bounds
@@ -75,7 +88,7 @@ def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
             issues.append(Issue("off-screen", "warning", node, f"entirely outside the screen {screen}"))
             continue
         clickable = is_clickable(node)
-        if clickable and snap.density:
+        if clickable and snap.density and not _clipped(b, window, screen):
             w, h = dp(b.width, snap.density), dp(b.height, snap.density)
             if w < MIN_TOUCH_DP or h < MIN_TOUCH_DP:
                 issues.append(Issue("touch-target", "warning", node,
@@ -84,7 +97,13 @@ def run_checks(snap: Snapshot, max_depth: int = MAX_DEPTH) -> list[Issue]:
         if ui is not None and (clickable or "Image" in node.short_class) and not _has_text(node):
             parent = ancestors[-1] if ancestors else None
             labelled_by_parent = parent is not None and parent.bounds == b and _has_text(parent)
-            if not labelled_by_parent:
+            clickable_owner = next((a for a in reversed(ancestors) if is_clickable(a)), None)
+            if clickable and clickable_owner is not None and _has_text(clickable_owner):
+                issues.append(Issue("nested-clickable", "info", node,
+                                    f"separately clickable inside labelled {_name(clickable_owner)}; screen "
+                                    "readers announce it without a label (Compose: RadioButton/Checkbox "
+                                    "onClick = null and Modifier.selectable/toggleable on the row)"))
+            elif not labelled_by_parent:
                 issues.append(Issue("missing-label", "warning", node,
                                     "clickable or image view without text or content description"))
 

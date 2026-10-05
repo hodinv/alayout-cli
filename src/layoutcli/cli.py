@@ -144,7 +144,7 @@ def check(snapshot_dir: Annotated[Optional[Path], typer.Argument(
         raise _fail(e)
     issues = run_checks(snap)
     warnings = sum(1 for i in issues if i.severity == "warning")
-    console.print(f"{warnings} warnings, {len(issues) - warnings} info in "
+    console.print(f"{warnings} warning{'' if warnings == 1 else 's'}, {len(issues) - warnings} info in "
                   f"{escape(snap.activity or snap.package or 'unknown app')}")
     for issue in sorted(issues, key=lambda i: (i.severity != "warning", i.check)):
         style = "yellow" if issue.severity == "warning" else "dim"

@@ -85,3 +85,26 @@ def test_gone_subtree_is_skipped_and_invisible_reported():
     gone = ViewNode("a.Box", id="gone", visibility="gone", bounds=Rect(0, 0, 10, 10), children=[hidden_child])
     invisible = ViewNode("a.Box", id="inv", visibility="invisible", bounds=Rect(0, 0, 300, 300))
     assert checks(snap_of(gone, invisible)) == [("invisible-space", "inv")]
+
+
+def test_touch_target_skipped_for_view_clipped_by_uiautomator_window():
+    # edge-to-edge app: uiautomator clips the window at 2167, the real button is taller
+    clipped = ViewNode("android.view.View", id="clipped", bounds=Rect(48, 2040, 1032, 2167),
+                       props={"uiautomator": {"clickable": "true", "content-desc": "Later"}})
+    short = ViewNode("android.view.View", id="short", bounds=Rect(48, 1000, 1032, 1127),
+                     props={"uiautomator": {"clickable": "true", "content-desc": "Short"}})
+    snap = snap_of(clipped, short, density=480)
+    snap.root.props = {"uiautomator": {"bounds": "[0,0][1080,2167]"}}
+    assert checks(snap) == [("touch-target", "short")]
+
+
+def test_unlabelled_clickable_inside_labelled_clickable_row_is_nested_not_missing_label():
+    ui = {"clickable": "true", "content-desc": ""}
+    radio = ViewNode("android.view.View", id="radio", bounds=Rect(24, 711, 168, 855), props={"uiautomator": ui})
+    text = ViewNode("android.widget.TextView", text="Всегда", bounds=Rect(192, 754, 346, 813),
+                    props={"uiautomator": {"content-desc": ""}})
+    row = ViewNode("android.view.View", id="row", bounds=Rect(48, 711, 1032, 855),
+                   props={"uiautomator": ui}, children=[radio, text])
+    issues = run_checks(snap_of(row, density=480))
+    assert [(i.check, i.node.id, i.severity) for i in issues] == [("nested-clickable", "radio", "info")]
+    assert "onClick = null" in issues[0].message

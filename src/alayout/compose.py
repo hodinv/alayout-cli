@@ -354,6 +354,8 @@ def build_compose_subtree(hits: Iterable["ComposeHit"],
             siblings = node.children
         assert node is not None  # chain is non-empty
         node.bounds = _union(node.bounds, hit.bounds)
+        if hit.text and not node.text:
+            node.text = hit.text  # the string the agent read off the text node's modifier
         compose = node.props["compose"]
         if hit.file and "file" not in compose:
             compose["file"] = hit.file
@@ -396,18 +398,13 @@ def _mark_ghosts(siblings: list[ViewNode]) -> None:
         _mark_ghosts(node.children)
 
 
-def _is_interop(node: ViewNode) -> bool:
-    """A real Android View hosted by Compose (AndroidView) is in the dumpsys tree; a pure Compose
-    semantics node is uiautomator-only. Keep the former, replace the latter with the compose tree."""
-    return any("dumpsys" in n.props for n, _ in node.walk())
-
-
 def _in_host(hit: "ComposeHit", host: ViewNode) -> bool:
-    if host.bounds is None or hit.bounds is None:
-        return True
+    b = host.bounds
+    if b is None or hit.bounds is None or b.width <= 0 or b.height <= 0:
+        return True  # unknown/degenerate host bounds: don't drop the hit on a geometry test
     cx = (hit.bounds.left + hit.bounds.right) // 2
     cy = (hit.bounds.top + hit.bounds.bottom) // 2
-    return host.bounds.left <= cx <= host.bounds.right and host.bounds.top <= cy <= host.bounds.bottom
+    return b.left <= cx <= b.right and b.top <= cy <= b.bottom
 
 
 def _prune_ghosts(nodes: list[ViewNode]) -> list[ViewNode]:
@@ -430,21 +427,36 @@ def graft_compose_tree(root: ViewNode, hits: Iterable["ComposeHit"],
     hits = list(hits)
     if not any(hit.path_ids for hit in hits):
         return None
+    hosts = [node for node, _ in root.walk() if node.class_name.endswith("AndroidComposeView")]
+    # assign each hit to the innermost (smallest) host that contains it: an app can have several
+    # ComposeView hosts, nested or stacked, and grafting the whole tree under each one showed it
+    # repeated. A host that is assigned nothing is left as it was (its uiautomator children stay).
+    host_hits: dict[int, list["ComposeHit"]] = {id(h): [] for h in hosts}
+    for hit in hits:
+        best, best_area = None, None
+        for host in hosts:
+            if not _in_host(hit, host):
+                continue
+            b = host.bounds
+            # a real host wins over a degenerate (zero-area / unknown) one: rank the latter as largest
+            # so an invisible [0,98][0,98] host can't swallow every hit by having the smallest area
+            area = b.width * b.height if b and b.width > 0 and b.height > 0 else 1 << 62
+            if best is None or area < best_area:
+                best, best_area = host, area
+        if best is not None:
+            host_hits[id(best)].append(hit)
     placed = 0
-    for node, _ in list(root.walk()):
-        if not node.class_name.endswith("AndroidComposeView"):
+    for host in hosts:
+        here = host_hits[id(host)]
+        if not here:
             continue
-        semantics: list[ViewNode] = []
-        kept: list[ViewNode] = []
-        for child in node.children:
-            if _is_interop(child):
-                kept.append(child)
-            else:
-                semantics.extend(n for n, _ in child.walk())
-        here = [hit for hit in hits if _in_host(hit, node)]
+        # under a Compose host we show only the composable tree the agent reported: the uiautomator
+        # semantics are folded into it (for enrichment) and the interop Views (AndroidViewsHandler)
+        # are dropped -- in --compose mode this subtree is compose's, not a mix of native Views
+        semantics = [n for child in host.children for n, _ in child.walk()]
         subtree = build_compose_subtree(here, semantics)
         if not show_ghosts:
             subtree = _prune_ghosts(subtree)
-        node.children = subtree + kept
+        host.children = subtree
         placed += sum(1 for n in subtree for sub, _ in n.walk() if "compose" in sub.props)
     return placed

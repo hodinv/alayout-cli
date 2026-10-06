@@ -137,19 +137,21 @@ def test_graft_replaces_semantics_children_with_the_compose_tree():
     assert host.children[0] in compose_nodes(root)  # internal nodes render in the compose view
 
 
-def test_graft_keeps_interop_views_and_returns_none_without_ids():
+def test_without_ids_the_tree_is_left_to_the_overlay_path():
     root, host = _host_tree([A])
+    no_ids = [ComposeHit(bounds=A, name="Text", file=None, line=None, path=("Text",), path_ids=())]
+    assert graft_compose_tree(root, no_ids) is None  # host untouched; apply_compose_names handles it
+
+
+def test_compose_mode_drops_native_interop_views_under_the_host():
+    # in --compose mode the host shows the composable tree only, not hosted Android Views
+    root, host = _host_tree([A, B])
     interop = ViewNode("android.widget.Button", bounds=A, sources=["dumpsys", "uiautomator"],
                        props={"dumpsys": {"hash": "x"}})
     host.children.append(interop)
-    # a dump with no ids leaves the tree to the old overlay path
-    no_ids = [ComposeHit(bounds=A, name="Text", file=None, line=None,
-                         path=("Text",), path_ids=())]
-    assert graft_compose_tree(root, no_ids) is None
-    # with ids, the real view stays while semantics become the compose tree
     graft_compose_tree(root, _radio_hits())
-    assert interop in host.children
-    assert any(n.short_class == "QuestionContent" for n in host.children)
+    assert interop not in [n for n, _ in root.walk()]  # the native view is gone
+    assert [n.short_class for n in host.children] == ["QuestionContent"]
 
 
 def test_subcomposition_nests_under_its_host_when_the_path_is_prefixed():
@@ -194,6 +196,47 @@ def test_graft_keeps_ghosts_with_show_ghosts():
     ghost_node = next(n for n, _ in root.walk()
                       if n.props.get("compose", {}).get("id") == "290")
     assert ghost_node.props["compose"]["ghost"] == "true"  # kept, and still marked
+
+
+def test_agent_text_is_used_when_present():
+    # the agent read the string off the text node's modifier; it should land on the Text leaf even
+    # without any uiautomator semantics to match against
+    hit = ComposeHit(bounds=A, name="Text", file=None, line=None,
+                     path=("Card", "Text"), path_ids=(1, 2), text="Front Door")
+    roots = build_compose_subtree([hit])
+    text_node = roots[0].children[0]
+    assert text_node.short_class == "Text"
+    assert text_node.text == "Front Door"
+
+
+def test_overlapping_hosts_do_not_repeat_the_tree():
+    # two AndroidComposeViews covering the same area (nested/stacked). The tree must appear once,
+    # under the innermost host; the outer host keeps its own children (not a duplicate tree).
+    inner = ViewNode("androidx.compose.ui.platform.AndroidComposeView", bounds=Rect(0, 0, 800, 600),
+                     children=[ViewNode("android.view.View", bounds=b, sources=["uiautomator"],
+                                        props={"uiautomator": {}}) for b in (A, B)])
+    outer = ViewNode("androidx.compose.ui.platform.AndroidComposeView", bounds=Rect(0, 0, 1080, 2400),
+                     children=[inner])
+    root = ViewNode("com.android.internal.policy.DecorView", bounds=Rect(0, 0, 1080, 2400),
+                    children=[outer])
+    graft_compose_tree(root, _radio_hits())
+    tops = [n for n, _ in root.walk() if n.props.get("compose", {}).get("name") == "QuestionContent"]
+    assert len(tops) == 1  # exactly one tree, not one per host
+    assert tops[0] in inner.children  # placed under the innermost host
+
+
+def test_zero_area_host_does_not_swallow_hits():
+    # a degenerate [0,98][0,98] ComposeView must not win assignment over the real one just by having
+    # the smallest area; the tree belongs to the host that actually covers the content
+    real = ViewNode("androidx.compose.ui.platform.AndroidComposeView", bounds=Rect(0, 0, 800, 600),
+                    children=[ViewNode("android.view.View", bounds=b, sources=["uiautomator"],
+                                       props={"uiautomator": {}}) for b in (A, B)])
+    ghost_host = ViewNode("androidx.compose.ui.platform.AndroidComposeView", bounds=Rect(0, 98, 0, 98))
+    root = ViewNode("com.android.internal.policy.DecorView", bounds=Rect(0, 0, 1080, 2400),
+                    children=[ghost_host, real])
+    graft_compose_tree(root, _radio_hits())
+    assert [n.short_class for n in real.children] == ["QuestionContent"]  # content on the real host
+    assert ghost_host.children == []  # the zero-size host got nothing
 
 
 def test_parse_then_graft_builds_the_tree_from_agent_json():

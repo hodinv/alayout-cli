@@ -28,7 +28,7 @@ from alayout.model import Snapshot, ViewNode
 from alayout.screenshot import annotate, fit_image, render_screenshot
 from alayout.search import find_matches, keep_set
 from alayout.snapshot_io import load_apk_index
-from alayout.wireframe import render_wireframe
+from alayout.wireframe import render_wireframe, visible_nodes
 
 
 NO_SCREENSHOT = "no screenshot in this snapshot"
@@ -109,6 +109,37 @@ class Wireframe(ScreenshotView):
     def toggle_mode(self) -> None:
         self.mode = "screenshot" if self.mode == "wireframe" else "wireframe"
         self.refresh()
+
+    class Clicked(Message):
+        """A point in the preview was clicked, in device pixels."""
+
+        def __init__(self, x: int, y: int) -> None:
+            self.x, self.y = x, y
+            super().__init__()
+
+    def _device_at(self, col: int, row: int) -> tuple[int, int] | None:
+        """Device pixel under a content cell. The preview fits the screen top-left with
+        scale = min(cols/w, 2*rows/h) (two pixels per row, half-blocks), same as the renderers."""
+        size = self.content_size
+        sw, sh = self.device_screen
+        if size.width <= 0 or size.height <= 0 or sw <= 0 or sh <= 0:
+            return None
+        scale = min(size.width / sw, 2 * size.height / sh)
+        if scale <= 0:
+            return None
+        x = int((col + 0.5) / scale)  # cell centre
+        y = int((2 * (row + 0.5)) / scale)
+        if 0 <= x <= sw and 0 <= y <= sh:
+            return (x, y)
+        return None
+
+    def on_click(self, event: events.Click) -> None:
+        offset = event.get_content_offset(self)
+        if offset is None:
+            return
+        device = self._device_at(offset.x, offset.y)
+        if device is not None:
+            self.post_message(self.Clicked(*device))
 
     def render(self) -> Text:
         size = self.content_size
@@ -345,8 +376,38 @@ class LayoutApp(App):
     def _jump(self, node: ViewNode) -> None:
         tree_node = self._tree_nodes.get(node)
         if tree_node is not None:
+            self._reveal(tree_node)  # expand collapsed ancestors so the node is on screen
             self.query_one("#tree", Tree).move_cursor(tree_node)
         self.select(node)
+
+    def _reveal(self, tree_node: TreeNode[ViewNode]) -> None:
+        ancestors = []
+        parent = tree_node.parent
+        while parent is not None:
+            ancestors.append(parent)
+            parent = parent.parent
+        for ancestor in reversed(ancestors):
+            if ancestor.allow_expand and not ancestor.is_expanded:
+                ancestor.expand()
+
+    def _node_at(self, x: int, y: int) -> ViewNode | None:
+        """The view drawn at a device point: a composable there if any, else any widget; the most
+        specific (smallest) one, so a click lands on the leaf rather than its container."""
+        hits = [node for node in visible_nodes(self.snapshot.root)
+                if node.bounds is not None and node.bounds.left <= x <= node.bounds.right
+                and node.bounds.top <= y <= node.bounds.bottom
+                and node.bounds.width > 0 and node.bounds.height > 0]
+        compose = [node for node in hits if node in self._compose]
+        pool = compose or hits
+        # smallest wins; on a tie (a container sharing its child's box) the deepest, so reverse the
+        # pre-order list before min (min keeps the first minimum, which is then the last/deepest)
+        return min(reversed(pool), key=lambda n: n.bounds.width * n.bounds.height) if pool else None
+
+    def on_wireframe_clicked(self, event: "Wireframe.Clicked") -> None:
+        node = self._node_at(event.x, event.y)
+        if node is not None:
+            self._jump(node)
+            self.query_one("#tree", Tree).focus()
 
     # --- search & filter --------------------------------------------------------------------
 

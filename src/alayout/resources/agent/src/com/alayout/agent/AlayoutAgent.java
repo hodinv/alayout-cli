@@ -147,6 +147,27 @@ public class AlayoutAgent extends Instrumentation {
                             return reader.dump(AlayoutAgent.this, number, asked);
                         }
                     });
+                    if (reader != null && json != null && reader.sourceInfoSeen() == 0) {
+                        // names were not recorded (collection did not take at prepare, e.g. a tile's
+                        // composer was enabled after the hot reload): re-enable + hot-reload and retry
+                        Log.i(TAG, "no source info; re-enabling tooling and retrying the dump");
+                        onMain(new Callable<Boolean>() {
+                            @Override
+                            public Boolean call() {
+                                return reader.refresh(AlayoutAgent.this);
+                            }
+                        });
+                        SystemClock.sleep(TOOLING_WAIT_MS);
+                        String retry = onMain(new Callable<String>() {
+                            @Override
+                            public String call() {
+                                return reader.dump(AlayoutAgent.this, number, asked);
+                            }
+                        });
+                        if (retry != null && reader.sourceInfoSeen() > 0) {
+                            json = retry;
+                        }
+                    }
                     if (json == null) {
                         json = errorJson(number, "the app did not answer on its main thread");
                     }

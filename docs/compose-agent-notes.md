@@ -223,6 +223,16 @@ the real names from inside the app.
 Answer JSON: `{agent, request, package, tooling, windows:[{root, activity, left, top,
 composeViews:[{view, bounds, groups, nodes:[{bounds, rect, sourceInfo, path, pathIds}], debug?}]}], errors:[]}`
 
+**Text content**: the agent reads the literal string off a text node's modifier
+(`TextStringSimpleElement` / `TextAnnotatedStringElement` on the `BasicText` LayoutNode) and emits it
+as `nodes[].text`, so the label shows the real text even when Compose merges the semantics tree away
+and uiautomator has nothing at the node's bounds. The host prefers this over uiautomator enrichment.
+
+**Multiple ComposeView hosts**: `graft_compose_tree` assigns each agent hit to the **innermost**
+`AndroidComposeView` whose bounds contain it (smallest area), not every host that overlaps — an app
+with nested/stacked ComposeViews was showing the whole tree repeated under each. A host that gets no
+hits is left untouched (its uiautomator children stay).
+
 **Multi-process apps / reliable attach**: the agent manifest sets `targetProcesses="*"`, so `am
 instrument` attaches the agent to *every* process of the app (a `:something` UI process included),
 not only the default one. Since the agent then runs in processes with no UI too, `answerOrYield`

@@ -66,6 +66,7 @@ class ComposeHit:
     line: int | None
     path: tuple[str, ...] = ()
     path_ids: tuple[int, ...] = ()  # one stable group id per path element (see ComposeDump.pathOf)
+    text: str | None = None  # the literal string a text node draws, read from the node's modifier
     source_info: str = ""
 
 
@@ -165,6 +166,7 @@ def parse_agent_dump(text: str) -> AgentDump:
                     line=parsed[2] if parsed else None,
                     path=path or ((parsed[0],) if parsed else ()),
                     path_ids=path_ids,
+                    text=(str(node["text"]) if node.get("text") else None),
                     source_info=info))
     return dump
 

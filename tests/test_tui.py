@@ -307,3 +307,34 @@ def test_arrow_click_toggles_but_name_click_does_not():
             assert branch.is_expanded is now  # but did not toggle
 
     asyncio.run(scenario())
+
+
+def test_node_at_prefers_a_composable_then_the_smallest():
+    from alayout.model import Rect, Snapshot, ViewNode
+    leaf = ViewNode("android.view.View", bounds=Rect(0, 0, 100, 100), sources=["uiautomator"],
+                    props={"uiautomator": {}})
+    tiny_native = ViewNode("android.widget.Button", bounds=Rect(40, 40, 60, 60), sources=["dumpsys"],
+                           props={"dumpsys": {}})
+    big = ViewNode("android.widget.FrameLayout", bounds=Rect(0, 0, 1000, 1000),
+                   children=[leaf, tiny_native])
+    host = ViewNode("androidx.compose.ui.platform.AndroidComposeView", bounds=Rect(0, 0, 1000, 1000),
+                    children=[big])
+    root = ViewNode("com.android.internal.policy.DecorView", bounds=Rect(0, 0, 1000, 1000),
+                    children=[host])
+    app = LayoutApp(Snapshot(root=root, screen=(1000, 1000), density=160))
+    # (50,50) is inside leaf (composable) and tiny_native (smaller, native): the composable wins
+    assert app._node_at(50, 50) is leaf
+    # a point with no composable falls back to the smallest widget there
+    assert app._node_at(500, 500) is big
+
+
+def test_clicking_the_preview_selects_and_focuses_the_tree():
+    async def scenario():
+        app = LayoutApp(views_snapshot())
+        async with app.run_test(size=(140, 45)) as pilot:
+            await pilot.click("#wire", offset=(6, 6), times=1)
+            await pilot.pause()
+            assert isinstance(app.focused, Tree)  # focus moved to the tree
+            assert app.selected is not None       # something under the click got selected
+
+    asyncio.run(scenario())

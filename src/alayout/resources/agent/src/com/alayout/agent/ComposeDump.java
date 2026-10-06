@@ -51,6 +51,7 @@ public final class ComposeDump {
     private final List<String> samples = new ArrayList<String>();
     private int groups;
     private int subTables;
+    private int sourceInfoSeen;  // groups with source information in the last dump; 0 => names failed
     private boolean debug;
     private boolean tooling;
     private int enabledCount;
@@ -173,7 +174,21 @@ public final class ComposeDump {
         return new ArrayList<Object>(visited);
     }
 
+    /** Groups that carried source information in the last dump: 0 means the compiler's names were
+      * not filed into the slot table (collection did not take), so the caller can re-enable + retry. */
+    public int sourceInfoSeen() {
+        return sourceInfoSeen;
+    }
+
+    /** Re-enable tooling and hot-reload once more: a fallback when the first dump found no source
+      * information (the composers for some embedded ComposeViews were not yet enabled at prepare). */
+    public boolean refresh(Instrumentation instrumentation) {
+        tooling = enable(instrumentation);
+        return tooling;
+    }
+
     private String run(Instrumentation instrumentation, long request) {
+        sourceInfoSeen = 0;
         JSONObject json = new JSONObject();
         JSONArray windows = new JSONArray();
         List<View> tops = topLevelViews(instrumentation);
@@ -266,7 +281,26 @@ public final class ComposeDump {
                     + "activity runs in a different process (a multi-process app) and am instrument "
                     + "attached to the wrong one");
         }
-        return out;
+        return topMost(out);
+    }
+
+    /** Only the window the user is actually on. The process can hold several windows at once -- a
+      * background activity whose composition is still alive sits behind the foreground one -- and
+      * capturing them all mixes another screen's composables in. The foreground window is the one
+      * with window focus; a focused popup/dialog carries its focus, so this keeps the right one.
+      * If nothing reports focus (a brief transition), every window is kept rather than none. */
+    private List<View> topMost(List<View> views) {
+        List<View> focused = new ArrayList<View>();
+        for (int i = 0; i < views.size(); i++) {
+            try {
+                if (views.get(i).hasWindowFocus()) {
+                    focused.add(views.get(i));
+                }
+            } catch (Throwable ignored) {
+                // a view not attached to a window: skip the focus test
+            }
+        }
+        return focused.isEmpty() ? views : focused;
     }
 
     private void addViews(List<View> out, List<Object> views) {
@@ -362,8 +396,9 @@ public final class ComposeDump {
         view.getLocationOnScreen(location);
         named.clear();
         walked.clear();
-        tableBase.clear();
-        nextBase = 0;
+        // tableBase / nextBase are NOT reset here: group ids stay unique across every ComposeView of
+        // the dump, so the host can flatten all of them without one ComposeView's ids colliding with
+        // another's (an app may have many ComposeViews -- 9 on this screen)
         samples.clear();
         groups = 0;
         collectNames(view);
@@ -608,6 +643,9 @@ public final class ComposeDump {
         for (int i = 0; i < children.size(); i++) {
             Object child = children.get(i);
             String info = Ref.text(Ref.call(child, "getSourceInfo"));
+            if (info != null) {
+                sourceInfoSeen++;
+            }
             Object node = nodeOf(child);
             List<String> names = path;
             List<Integer> childIds = ids;
@@ -730,7 +768,11 @@ public final class ComposeDump {
             path.addAll(chain.names);
             List<Integer> ids = new ArrayList<Integer>(prefixIds);
             ids.addAll(chain.ids);
-            named.put(node, new Group(sourceInfoAt(table, i), path, ids));
+            String info = sourceInfoAt(table, i);
+            if (info != null) {
+                sourceInfoSeen++;
+            }
+            named.put(node, new Group(info, path, ids));
         }
     }
 
@@ -785,6 +827,35 @@ public final class ComposeDump {
         return Ref.text(text);
     }
 
+    /** The literal string a text node draws. `BasicText` puts a `TextStringSimpleElement` (plain
+      * String) or `TextAnnotatedStringElement` (an `AnnotatedString`, whose `text` is the String) on
+      * its LayoutNode, so the real text is read straight off the node's modifiers -- no need for the
+      * semantics tree, which Compose often merges away. Best effort: null when there is no text. */
+    private String textOf(Object node) {
+        List<Object> mods = Ref.items(Ref.call(node, "getModifierInfo"));
+        for (int i = 0; i < mods.size(); i++) {
+            Object modifier = Ref.call(mods.get(i), "getModifier");
+            if (modifier == null) {
+                continue;
+            }
+            String name = modifier.getClass().getName();
+            if (!name.contains("Text") || !name.endsWith("Element")) {
+                continue;
+            }
+            Object text = Ref.field(modifier, "text");
+            if (text instanceof String) {
+                return (String) text;
+            }
+            if (text != null) {  // an AnnotatedString: its own `text` field is the plain String
+                Object plain = Ref.field(text, "text");
+                if (plain instanceof String) {
+                    return (String) plain;
+                }
+            }
+        }
+        return null;
+    }
+
     private void walkNodes(Object node, JSONArray out, int[] viewLocation, int windowLeft,
                            int windowTop, int[] count, int depth) {
         if (node == null || count[0]++ > MAX_NODES || depth > MAX_DEPTH) {
@@ -810,6 +881,7 @@ public final class ComposeDump {
                 put(json, "path", new JSONArray(group.path));
                 put(json, "pathIds", new JSONArray(group.pathIds));
             }
+            put(json, "text", textOf(node));
             out.put(json);
         }
         List<Object> children = childrenOf(node);

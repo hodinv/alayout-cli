@@ -223,6 +223,17 @@ the real names from inside the app.
 Answer JSON: `{agent, request, package, tooling, windows:[{root, activity, left, top,
 composeViews:[{view, bounds, groups, nodes:[{bounds, rect, sourceInfo, path, pathIds}], debug?}]}], errors:[]}`
 
+**Multi-process apps / reliable attach**: the agent manifest sets `targetProcesses="*"`, so `am
+instrument` attaches the agent to *every* process of the app (a `:something` UI process included),
+not only the default one. Since the agent then runs in processes with no UI too, `answerOrYield`
+(AlayoutAgent) lets the process that actually holds the Compose window answer a request first, and
+only writes an empty/error answer as a fallback if none did within `YIELD_MS` — so an empty process
+can't return a false "no windows". `start()` also launches the app at its **launcher** entry (not the
+inner activity that was on top), because a deep activity often won't start cold after a force-stop,
+leaving the screen blank; the user navigates to the target screen, and `finish()` still restores the
+original activity. The dump/ack JSON carries `process` + `pid`, surfaced in the `compose` capability
+line and the errors, so a wrong-process attach is visible.
+
 **Subcomposition stitching** (`Scaffold`, `LazyColumn`, …): `collectNames` walks **only the main
 composition table** (per holder: `compositionData`), never every reachable table. A `SubcomposeLayout`
 builds its slots (content, bars, list items) in separate tables; those are walked only by

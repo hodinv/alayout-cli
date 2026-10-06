@@ -71,6 +71,8 @@ public final class ComposeDump {
         put(json, "agent", 1);
         put(json, "request", request);
         put(json, "prepared", tooling);
+        put(json, "process", processName());
+        put(json, "pid", android.os.Process.myPid());
         put(json, "hotReloaded", hotReloaded);
         put(json, "enabledCount", enabledCount);
         put(json, "errors", new JSONArray(errors));
@@ -183,16 +185,51 @@ public final class ComposeDump {
         }
         if (windows.length() == 0) {
             errors.add("no androidx.compose.ui.platform.AndroidComposeView in any of the "
-                    + tops.size() + " window(s) of this process; this screen is Views, or the "
-                    + "activity runs in another process");
+                    + tops.size() + " window(s) of " + where() + "; this screen is Views, or its "
+                    + "activity runs in another process than the one am instrument attached to");
         }
         put(json, "agent", 1);
         put(json, "request", request);
         put(json, "package", instrumentation.getTargetContext().getPackageName());
+        put(json, "process", processName());
+        put(json, "pid", android.os.Process.myPid());
         put(json, "tooling", tooling);
         put(json, "windows", windows);
         put(json, "errors", new JSONArray(errors));
         return json.toString();
+    }
+
+    /** The process this agent is actually running in -- the one `am instrument` attached to. A
+      * multi-process app may draw its UI in another process, which this agent cannot see. */
+    private static String processName() {
+        try {
+            Object name = Ref.callStatic(Class.forName("android.app.ActivityThread"),
+                    "currentProcessName");
+            if (name instanceof String) {
+                return (String) name;
+            }
+        } catch (Throwable ignored) {
+            // older platform: fall back to the command line
+        }
+        try {
+            java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.FileReader("/proc/self/cmdline"));
+            try {
+                String line = reader.readLine();
+                if (line != null) {
+                    return line.replace('\0', ' ').trim();
+                }
+            } finally {
+                reader.close();
+            }
+        } catch (Throwable ignored) {
+            // unreadable
+        }
+        return null;
+    }
+
+    private static String where() {
+        return "process " + processName() + " (pid " + android.os.Process.myPid() + ")";
     }
 
     /** The windows of this process: what the WindowManager holds, with the activities as a
@@ -225,7 +262,9 @@ public final class ComposeDump {
             }
         }
         if (out.isEmpty() && instrumentation != null) {
-            errors.add("no windows found in this process");
+            errors.add("no windows found in " + where() + "; if the app's UI is on screen, its "
+                    + "activity runs in a different process (a multi-process app) and am instrument "
+                    + "attached to the wrong one");
         }
         return out;
     }

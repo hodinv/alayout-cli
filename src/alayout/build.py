@@ -77,6 +77,8 @@ def _apply_names(raw: RawCapture, root: ViewNode, caps: dict[str, str],
         named = apply_compose_names(root, dump.hits)
     total = len(compose_nodes(root))
     caps["compose"] = f"ok ({named} of {total} Compose views named)" if total else f"ok ({named})"
+    if dump.process and dump.package and dump.process != dump.package:
+        caps["compose"] += f"; agent ran in process {dump.process}"  # a non-default (e.g. :foo) process
     if dump.errors:
         caps["compose"] += "; " + "; ".join(dump.errors)
 

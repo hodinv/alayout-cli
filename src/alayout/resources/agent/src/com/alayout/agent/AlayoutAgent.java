@@ -31,6 +31,7 @@ public class AlayoutAgent extends Instrumentation {
     private static final String TAG = "alayout";
     private static final long POLL_MS = 150;
     private static final long TOOLING_WAIT_MS = 1200;
+    private static final long YIELD_MS = 1500;  // a process with no UI waits this long for one with
     private static final long DEFAULT_TIMEOUT_S = 1800L;
 
     private Bundle arguments = new Bundle();
@@ -129,7 +130,9 @@ public class AlayoutAgent extends Instrumentation {
                     String ack = prepared == null
                             ? errorJson(number, "the app did not answer on its main thread")
                             : prepared.ackJson(number);
-                    write(dump, ack);
+                    // in a multi-process app the agent also runs in processes with no Compose; let the
+                    // one that actually prepared the UI answer, and only fall back to ours if none did
+                    answerOrYield(dump, number, ack, ack.contains("\"prepared\":true"), "\"prepared\":true");
                     Log.i(TAG, "prepared (" + ack.length() + " chars)");
                 } else if ("dump".equals(command)) {
                     if (prepared == null) {  // a dump without a prepare: enable now (one-shot)
@@ -147,7 +150,7 @@ public class AlayoutAgent extends Instrumentation {
                     if (json == null) {
                         json = errorJson(number, "the app did not answer on its main thread");
                     }
-                    write(dump, json);
+                    answerOrYield(dump, number, json, json.contains("\"windows\":[{"), "\"windows\":[{");
                     Log.i(TAG, "wrote " + dump.getAbsolutePath() + " (" + json.length() + " chars)");
                 }
             }
@@ -204,6 +207,51 @@ public class AlayoutAgent extends Instrumentation {
                 return reader.readLine();
             } finally {
                 reader.close();
+            }
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /** Write our answer, unless this process has no UI and another one (that does) has already
+      * answered this request -- then let that answer stand. We wait a moment for it, and if nobody
+      * answers we write ours anyway so the host is never left hanging. `uiNeedle` marks an answer
+      * that came from the process holding the Compose UI. */
+    private void answerOrYield(File dump, long number, String answer, boolean hasUi, String uiNeedle) {
+        if (!hasUi) {
+            if (uiAnswered(dump, number, uiNeedle)) {
+                Log.i(TAG, "no UI in this process; another process answered request " + number);
+                return;
+            }
+            SystemClock.sleep(YIELD_MS);
+            if (uiAnswered(dump, number, uiNeedle)) {
+                Log.i(TAG, "no UI in this process; yielded request " + number);
+                return;
+            }
+        }
+        write(dump, answer);
+    }
+
+    private static boolean uiAnswered(File dump, long number, String uiNeedle) {
+        String content = readAll(dump);
+        return content != null && content.contains("\"request\":" + number) && content.contains(uiNeedle);
+    }
+
+    private static String readAll(File file) {
+        if (!file.canRead()) {
+            return null;
+        }
+        try {
+            FileInputStream in = new FileInputStream(file);
+            try {
+                byte[] buffer = new byte[Math.max(1, (int) Math.min(file.length(), 1 << 20))];
+                int total = 0, read;
+                while (total < buffer.length && (read = in.read(buffer, total, buffer.length - total)) > 0) {
+                    total += read;
+                }
+                return new String(buffer, 0, total, "UTF-8");
+            } finally {
+                in.close();
             }
         } catch (Throwable e) {
             return null;

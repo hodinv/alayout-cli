@@ -75,6 +75,7 @@ class AgentDump:
     windows: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     package: str | None = None
+    process: str | None = None
 
     @property
     def named(self) -> list[ComposeHit]:
@@ -142,6 +143,7 @@ def parse_agent_dump(text: str) -> AgentDump:
     if not isinstance(data, dict):
         raise AgentError(f"unexpected agent answer: {text[:80]}")
     dump.package = data.get("package")
+    dump.process = data.get("process")
     dump.errors = [str(e) for e in data.get("errors") or ()]
     for window in data.get("windows") or ():
         title = window.get("activity") or window.get("root") or "window"
@@ -265,7 +267,11 @@ def start(adb: AgentDevice, package: str, activity: str | None, apk: Path,
     adb.exec_out(f"am force-stop {package}")
     attached = Attachment(adb, package, agent_timeout, debug)
     attached.check()
-    launch(adb, package, activity)
+    # start the app at its launcher entry, not the activity that happened to be on top: after a
+    # force-stop a deep inner activity often won't start cold (it needs its back stack / app init),
+    # which leaves the screen blank. The user navigates to the screen they want next (collect's
+    # wait()); the original activity is only used by finish() to restore the view afterwards.
+    launch(adb, package, None)
     return attached
 
 
@@ -290,11 +296,14 @@ def _prepare(adb: AgentDevice, package: str, log: Callable[[str], None],
         except (AgentError, ValueError):
             ack = {}
         if ack.get("prepared"):
-            log(f"composable names: collection enabled on {package}")
+            where = f" (process {ack['process']})" if ack.get("process") else ""
+            log(f"composable names: collection enabled on {package}{where}")
             return
         if attempt + 1 < attempts:
             time.sleep(0.6)
-    log(f"composable names: no Compose window to prepare on {package} yet; capturing as-is")
+    where = f" in process {ack['process']}" if ack.get("process") else ""
+    log(f"composable names: no Compose window to prepare on {package}{where} yet; capturing as-is"
+        " (if the app is multi-process, its UI may be in another process)")
 
 
 def read_dump(adb: AgentDevice, package: str, seq: int, timeout: float = 60.0) -> str:

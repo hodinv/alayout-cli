@@ -15,8 +15,13 @@ the placeholder below before running aapt2 (see src/alayout/agentbuild.py). -->
 
     <application android:label="alayout agent" />
 
+    <!-- targetProcesses="*" so the agent attaches to every process of the app, not only the
+         default one: a multi-process app may draw its Compose UI in a ":something" process, and
+         without this the agent lands in a process with no windows. (Attribute added in API 26;
+         ignored on older devices, where the app is single-process anyway.) -->
     <instrumentation
         android:name="com.alayout.agent.AlayoutAgent"
         android:label="alayout composable names"
-        android:targetPackage="@TARGET_PACKAGE@" />
+        android:targetPackage="@TARGET_PACKAGE@"
+        android:targetProcesses="*" />
 </manifest>

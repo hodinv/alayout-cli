@@ -123,7 +123,7 @@ def test_clean_is_quiet_when_agent_absent(monkeypatch):
 def test_compose_flag_reaches_capture(tmp_path, monkeypatch):
     seen = {}
     monkeypatch.setattr(cli, "_capture",
-                        lambda adb, serial, out, apk=None, compose=False, signing=None:
+                        lambda adb, serial, out, apk=None, compose=False, signing=None, show_ghosts=False:
                         seen.update(compose=compose, signing=signing) or tmp_path)
     result = runner.invoke(cli.app, ["capture", "--compose"])
     assert result.exit_code == 0
@@ -167,7 +167,7 @@ def test_compose_without_debug_env_stays_quiet(tmp_path, monkeypatch):
 def test_keystore_flags_build_a_signing_override(tmp_path, monkeypatch):
     seen = {}
     monkeypatch.setattr(cli, "_capture",
-                        lambda adb, serial, out, apk=None, compose=False, signing=None:
+                        lambda adb, serial, out, apk=None, compose=False, signing=None, show_ghosts=False:
                         seen.update(signing=signing) or tmp_path)
     result = runner.invoke(cli.app, ["capture", "--compose", "--keystore", "my.ks",
                                      "--key-alias", "rel", "--key-password", "pw"])

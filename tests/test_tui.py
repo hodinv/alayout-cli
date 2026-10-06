@@ -3,12 +3,13 @@ from io import BytesIO
 
 from helpers import views_raw, views_snapshot
 from PIL import Image
+from textual.coordinate import Coordinate
 from textual.widgets import DataTable, Tree
 
 from alayout.apk import ApkIndex, apply_index
 from alayout.checks import run_checks
 from alayout.snapshot_io import save_apk_index, save_capture
-from alayout.tui.app import LayoutApp
+from alayout.tui.app import LayoutApp, LayoutTree, PropsTable
 
 
 def tree_nodes(node):
@@ -253,3 +254,56 @@ def test_tree_shows_compose_nodes_by_kind_and_search_finds_them():
         await pilot.pause()
         assert app.selected.class_name == "android.widget.Button" and app.selected.text is None
     run_app(views_snapshot(), scenario)
+
+
+def test_name_click_does_not_toggle_expand():
+    # expand/collapse is only on the ▶/▼ arrow (or space), so selecting a name must not toggle it
+    assert LayoutTree.auto_expand is False
+
+
+def test_double_click_property_copies_its_value():
+    async def scenario():
+        app = LayoutApp(views_snapshot())
+        async with app.run_test(size=(140, 45)) as pilot:
+            table = app.query_one("#props", PropsTable)
+            expected = table.get_cell_at(Coordinate(0, PropsTable.VALUE_COLUMN)).plain
+            await pilot.click("#props", offset=(3, 1), times=2)  # first data row, double-click
+            await pilot.pause()
+            assert app.clipboard == expected
+
+    asyncio.run(scenario())
+
+
+def test_double_click_name_opens_the_png(monkeypatch):
+    opened = []
+    monkeypatch.setattr("alayout.tui.app.open_file", lambda path, env=None: opened.append(path))
+
+    async def scenario():
+        app = LayoutApp(views_snapshot())
+        app._image = Image.new("RGB", (108, 240))  # a screenshot to annotate and open
+        async with app.run_test(size=(140, 45)) as pilot:
+            await pilot.click("#tree", offset=(20, 0), times=2)  # the root node's name
+            await pilot.pause()
+            assert len(opened) == 1 and str(opened[0]).endswith(".png")
+
+    asyncio.run(scenario())
+
+
+def test_arrow_click_toggles_but_name_click_does_not():
+    async def scenario():
+        app = LayoutApp(views_snapshot())
+        async with app.run_test(size=(140, 45)) as pilot:
+            tree = app.query_one("#tree", Tree)
+            branch = next(b for b in tree.root.children if b.children)
+            y = branch.line
+            expanded = branch.is_expanded
+            await pilot.click("#tree", offset=(4, y), times=1)  # the ▶/▼ arrow
+            await pilot.pause()
+            assert branch.is_expanded is not expanded  # arrow toggled it
+            now = branch.is_expanded
+            await pilot.click("#tree", offset=(14, y), times=1)  # the name
+            await pilot.pause()
+            assert app.selected is branch.data  # name selected it
+            assert branch.is_expanded is now  # but did not toggle
+
+    asyncio.run(scenario())

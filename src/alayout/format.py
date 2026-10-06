@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from rich.text import Text
@@ -8,6 +9,12 @@ from alayout.model import Rect, ViewNode
 
 if TYPE_CHECKING:
     from alayout.compose import Component
+
+
+def _compose_debug() -> bool:
+    """ALAYOUT_DEBUG also turns on the composable-id/empty-box markers in the tree labels, so a
+    duplicate node (e.g. an AnimatedContent pass being animated out) can be told apart on the device."""
+    return bool(os.environ.get("ALAYOUT_DEBUG"))
 
 
 def dp(px: int, density: int | None) -> int | None:
@@ -24,11 +31,6 @@ def size_text(rect: Rect, density: int | None) -> str:
 def _clip(s: str, n: int) -> str:
     s = s.replace("\n", " ")
     return s if len(s) <= n else s[: n - 1] + "…"
-
-
-def _clip_end(s: str, n: int) -> str:
-    """Clip keeping the tail: a call chain's most specific composable is at the end."""
-    return s if len(s) <= n else "…" + s[-(n - 1):]
 
 
 def compose_kind(node: ViewNode, component: Component | None) -> tuple[str, str | None]:
@@ -53,9 +55,8 @@ def _compose_label(node: ViewNode, warning: bool, component: Component | None) -
     compose = node.props.get("compose", {})
     named = compose.get("name")
     kind, text = compose_kind(node, component)
-    # show the real composable call chain (tail-clipped so the most specific name stays visible)
-    headline = _clip_end(compose["path"], 48) if named and "path" in compose else kind
-    label = Text(headline, style="bold bright_cyan" if named else "bold cyan")
+    # the composable's own name: the tree shows its ancestry by nesting, the full path is in details
+    label = Text(kind, style="bold bright_cyan" if named else "bold cyan")
     if text:
         label.append(f' "{_clip(text, 30)}"', style="green")
     if named and component is not None:
@@ -64,6 +65,14 @@ def _compose_label(node: ViewNode, warning: bool, component: Component | None) -
         label.append(" [" + ", ".join(component.state) + "]", style="yellow")
     if node.bounds is not None:
         label.append(f" {node.bounds.width}x{node.bounds.height}", style="dim")
+    if _compose_debug() and named:
+        if compose.get("id"):
+            label.append(f" #{compose['id']}", style="dim")  # the slot-group id (RadioGroup#2334)
+        backed = sum(1 for n, _ in node.walk() if "uiautomator" in n.sources)
+        label.append(f" ui:{backed}", style="dim")  # on-screen leaves under here (0 = draws no semantics)
+        empty = node.bounds is not None and (node.bounds.width <= 0 or node.bounds.height <= 0)
+        if compose.get("ghost") or empty:
+            label.append(" ∅", style="red")  # a duplicate pass not on screen, or a collapsed box
     if component is not None and component.repeat:
         label.append(f" ({component.repeat[0]} of {component.repeat[1]} similar)", style="dim")
     if node.visibility != "visible":

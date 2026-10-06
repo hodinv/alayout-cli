@@ -60,13 +60,38 @@ def test_compose_label_uses_component_kind_instead_of_class():
         "Selector 984x170 ⚠"
 
 
-def test_compose_label_shows_the_real_call_chain_when_named():
+def test_compose_label_shows_the_composable_name_the_tree_nests_the_rest():
     node = ViewNode("android.view.View", bounds=Rect(0, 211, 984, 270), sources=["uiautomator"],
                     props={"uiautomator": {},
                            "compose": {"name": "RadioItem",
                                        "path": "QuestionContent > RadioGroup > RadioItem"}})
-    assert node_label(node, in_compose=True).plain == \
-        "QuestionContent > RadioGroup > RadioItem 984x59"
+    # the label is just the composable; its ancestry shows through the tree, the path is in details
+    assert node_label(node, in_compose=True).plain == "RadioItem 984x59"
+
+
+def test_compose_label_debug_shows_id_onscreen_count_and_empty_box(monkeypatch):
+    monkeypatch.setenv("ALAYOUT_DEBUG", "1")
+    # a ghost pass (flagged by _mark_ghosts): real size, no on-screen leaves, marked ghost -> ∅
+    ghost = ViewNode("androidx.compose.QuestionContent", bounds=Rect(0, 211, 984, 307),
+                     sources=["compose"],
+                     props={"compose": {"name": "QuestionContent", "id": "290", "ghost": "true"}})
+    # the live pass: a leaf enriched from uiautomator -> ui:1, no ghost flag
+    live = ViewNode("androidx.compose.Text", bounds=Rect(0, 211, 189, 270), text="Always",
+                    sources=["compose", "uiautomator"],
+                    props={"compose": {"name": "Text", "id": "671"}, "uiautomator": {}})
+    # a legitimately semantics-less composable: ui:0 but NOT a ghost (no ∅)
+    custom = ViewNode("androidx.compose.CustomRadioButtonBox", bounds=Rect(0, 211, 96, 307),
+                      sources=["compose"], props={"compose": {"name": "CustomRadioButtonBox", "id": "455"}})
+    assert node_label(ghost, in_compose=True).plain == "QuestionContent 984x96 #290 ui:0 ∅"
+    assert node_label(live, in_compose=True).plain == 'Text "Always" 189x59 #671 ui:1'
+    assert node_label(custom, in_compose=True).plain == "CustomRadioButtonBox 96x96 #455 ui:0"
+
+
+def test_compose_label_has_no_markers_without_debug(monkeypatch):
+    monkeypatch.delenv("ALAYOUT_DEBUG", raising=False)
+    node = ViewNode("android.view.View", bounds=Rect(0, 211, 984, 307), sources=["uiautomator"],
+                    props={"uiautomator": {}, "compose": {"name": "QuestionContent", "id": "290"}})
+    assert node_label(node, in_compose=True).plain == "QuestionContent 984x96"
 
 
 def test_compose_label_for_plain_semantics_nodes():

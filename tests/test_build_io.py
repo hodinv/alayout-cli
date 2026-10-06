@@ -19,6 +19,17 @@ def test_build_snapshot_from_full_capture():
     assert snap.captured_at == AT
 
 
+def test_without_compose_the_composeview_keeps_its_uiautomator_nodes():
+    # no --compose: nothing runs the agent, so the tree is the plain dumpsys+uiautomator merge and
+    # the semantics nodes stay under AndroidComposeView, exactly as before composable names existed
+    snap = build_snapshot(views_raw(), AT)
+    assert "compose" not in snap.capabilities
+    host = next(n for n, _ in snap.root.walk() if n.class_name.endswith("AndroidComposeView"))
+    assert host.children  # the uiautomator semantics (and any interop views) are still there
+    assert all("compose" not in n.props for n, _ in snap.root.walk())  # no synthetic compose nodes
+    assert all(n.class_name.startswith(("android.", "androidx.")) for n in host.children)
+
+
 def test_falls_back_to_dumpsys_when_uiautomator_failed():
     raw = views_raw()
     raw.uiautomator_xml = None

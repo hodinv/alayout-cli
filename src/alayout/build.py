@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 from alayout.agent import AgentError, parse_agent_dump
 from alayout.capture import RawCapture
-from alayout.compose import apply_compose_names, compose_nodes
+from alayout.compose import apply_compose_names, compose_nodes, graft_compose_tree
 from alayout.merge import merge, select_window
 from alayout.model import Snapshot, ViewNode
 from alayout.parse.dumpsys import parse_dumpsys
@@ -18,7 +18,7 @@ class BuildError(Exception):
     pass
 
 
-def build_snapshot(raw: RawCapture, captured_at: str) -> Snapshot:
+def build_snapshot(raw: RawCapture, captured_at: str, show_ghosts: bool = False) -> Snapshot:
     caps: dict[str, str] = {}
 
     dump = parse_dumpsys(raw.dumpsys_text) if raw.dumpsys_text else None
@@ -49,7 +49,7 @@ def build_snapshot(raw: RawCapture, captured_at: str) -> Snapshot:
     if rejected and ui_roots:
         caps["uiautomator"] = rejected
     root = merge(dump, [window] if window is not None else [])
-    _apply_names(raw, root, caps)
+    _apply_names(raw, root, caps, show_ghosts)
     screen = _screen_size(parse_wm_size(raw.wm_size or ""), root)
     package = dump.package if dump else root.props.get("uiautomator", {}).get("package")
     return Snapshot(
@@ -58,7 +58,8 @@ def build_snapshot(raw: RawCapture, captured_at: str) -> Snapshot:
         device=dict(raw.device), captured_at=captured_at, capabilities=caps)
 
 
-def _apply_names(raw: RawCapture, root: ViewNode, caps: dict[str, str]) -> None:
+def _apply_names(raw: RawCapture, root: ViewNode, caps: dict[str, str],
+                 show_ghosts: bool = False) -> None:
     """The composable names the agent read inside the app, or why they are missing."""
     if not raw.compose_json:
         if raw.errors.get("compose"):
@@ -69,7 +70,11 @@ def _apply_names(raw: RawCapture, root: ViewNode, caps: dict[str, str]) -> None:
     except AgentError as e:
         caps["compose"] = str(e)
         return
-    named = apply_compose_names(root, dump.hits)
+    # with group ids the agent lets us rebuild the real composable tree under each Compose host;
+    # an older agent (no ids) falls back to naming the flat semantics nodes in place
+    named = graft_compose_tree(root, dump.hits, show_ghosts)
+    if named is None:
+        named = apply_compose_names(root, dump.hits)
     total = len(compose_nodes(root))
     caps["compose"] = f"ok ({named} of {total} Compose views named)" if total else f"ok ({named})"
     if dump.errors:

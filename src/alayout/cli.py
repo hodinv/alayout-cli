@@ -53,6 +53,10 @@ KeyPasswordOpt = Annotated[Optional[str], typer.Option(
     "--key-password", help="Password of the key in --keystore.")]
 StorePasswordOpt = Annotated[Optional[str], typer.Option(
     "--key-store-password", help="Password of --keystore itself (defaults to --key-password).")]
+ShowGhostsOpt = Annotated[bool, typer.Option(
+    "--show-ghosts", help="Keep duplicate composable passes that are not on screen (e.g. an "
+                          "AnimatedContent state being animated out); they are dropped by default. "
+                          "With ALAYOUT_DEBUG they are marked ∅ in the tree.")]
 
 
 def _utf8_output() -> None:
@@ -103,10 +107,11 @@ def _choose_snapshot(title: str = "Snapshot") -> Path | None:
 
 def _resolve_snapshot(snapshot_dir: Path | None, adb: str | None, serial: str | None,
                       title: str = "Snapshot", apk: str | None = None,
-                      compose: bool = False, signing: SigningKey | None = None) -> Path:
+                      compose: bool = False, signing: SigningKey | None = None,
+                      show_ghosts: bool = False) -> Path:
     directory = snapshot_dir if snapshot_dir is not None else _choose_snapshot(title)
     if directory is None:
-        return _capture(adb, serial, None, apk, compose, signing)
+        return _capture(adb, serial, None, apk, compose, signing, show_ghosts)
     if apk:
         err_console.print("[yellow]warning:[/] --apk is ignored for an existing snapshot "
                           "(it applies to new captures)")
@@ -158,7 +163,8 @@ def _wait_for_screen(package: str, activity: str | None) -> None:
 
 
 def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: str | None = None,
-             compose: bool = False, signing: SigningKey | None = None) -> Path:
+             compose: bool = False, signing: SigningKey | None = None,
+             show_ghosts: bool = False) -> Path:
     adb = _make_adb(adb_path, serial)
     session = None
     if compose:
@@ -171,7 +177,8 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
     if session is not None:
         raw.compose_json = session.dump
         finish_names(adb, session)
-    snap = build_snapshot(raw, captured_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    snap = build_snapshot(raw, captured_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                          show_ghosts=show_ghosts)
     index = None
     if apk:
         try:
@@ -189,11 +196,11 @@ def _capture(adb_path: str | None, serial: str | None, out: Path | None, apk: st
 
 
 def _global(ctx: typer.Context, serial: str | None, adb: str | None, apk: str | None,
-            compose: bool = False):
+            compose: bool = False, show_ghosts: bool = False):
     """Options given before the command (alayout --apk device capture) fill in unset ones."""
     given = ctx.obj or {}
     return (serial or given.get("serial"), adb or given.get("adb"), apk or given.get("apk"),
-            compose or bool(given.get("compose")))
+            compose or bool(given.get("compose")), show_ghosts or bool(given.get("show_ghosts")))
 
 
 def _signing(ctx: typer.Context, keystore: str | None, alias: str | None,
@@ -253,6 +260,7 @@ def _fail(error: Exception) -> typer.Exit:
 def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
          compose: ComposeOpt = False, keystore: KeystoreOpt = None, key_alias: KeyAliasOpt = None,
          key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None,
+         show_ghosts: ShowGhostsOpt = False,
          version: Annotated[bool, typer.Option("--version", help="Print the version and exit.")] = False,
          self_test: Annotated[Optional[Path], typer.Option(
              "--self-test", metavar="SNAPSHOT_DIR",
@@ -267,11 +275,11 @@ def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: 
         raise typer.Exit(code=_self_test(self_test))
     ctx.obj = {"serial": serial, "adb": adb, "apk": apk, "compose": compose,  # also before the command
                "keystore": keystore, "key_alias": key_alias, "key_password": key_password,
-               "key_store_password": key_store_password}
+               "key_store_password": key_store_password, "show_ghosts": show_ghosts}
     if ctx.invoked_subcommand is None:
         signing = signing_override(keystore, key_alias, key_password, key_store_password)
         try:
-            directory = _capture(adb, serial, None, apk, compose, signing)
+            directory = _capture(adb, serial, None, apk, compose, signing, show_ghosts)
             snap = load_snapshot(directory)
         except (AdbError, BuildError, SnapshotError, OSError) as e:
             raise _fail(e)
@@ -282,13 +290,14 @@ def main(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: 
 def capture(ctx: typer.Context, serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
             compose: ComposeOpt = False, keystore: KeystoreOpt = None, key_alias: KeyAliasOpt = None,
             key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None,
+            show_ghosts: ShowGhostsOpt = False,
             out: Annotated[Optional[Path], typer.Option("--out", "-o", help="Snapshot directory.")] = None
             ) -> None:
     """Capture the foreground screen's layout into a snapshot directory."""
     signing = _signing(ctx, keystore, key_alias, key_password, key_store_password)
-    serial, adb, apk, compose = _global(ctx, serial, adb, apk, compose)
+    serial, adb, apk, compose, show_ghosts = _global(ctx, serial, adb, apk, compose, show_ghosts)
     try:
-        _capture(adb, serial, out, apk, compose, signing)
+        _capture(adb, serial, out, apk, compose, signing, show_ghosts)
     except (AdbError, BuildError, OSError) as e:
         raise _fail(e)
 
@@ -298,13 +307,14 @@ def inspect(ctx: typer.Context, snapshot_dir: Annotated[Optional[Path], typer.Ar
                 help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
             serial: SerialOpt = None, adb: AdbOpt = None, apk: ApkOpt = None,
             compose: ComposeOpt = False, keystore: KeystoreOpt = None, key_alias: KeyAliasOpt = None,
-            key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None) -> None:
+            key_password: KeyPasswordOpt = None, key_store_password: StorePasswordOpt = None,
+            show_ghosts: ShowGhostsOpt = False) -> None:
     """Open a snapshot in the interactive inspector."""
     signing = _signing(ctx, keystore, key_alias, key_password, key_store_password)
-    serial, adb, apk, compose = _global(ctx, serial, adb, apk, compose)
+    serial, adb, apk, compose, show_ghosts = _global(ctx, serial, adb, apk, compose, show_ghosts)
     try:
         directory = _resolve_snapshot(snapshot_dir, adb, serial, apk=apk, compose=compose,
-                                      signing=signing)
+                                      signing=signing, show_ghosts=show_ghosts)
         snap = load_snapshot(directory)
     except (AdbError, BuildError, SnapshotError, OSError) as e:
         raise _fail(e)
@@ -316,7 +326,7 @@ def check(ctx: typer.Context, snapshot_dir: Annotated[Optional[Path], typer.Argu
               help="Snapshot directory; when omitted, pick a saved one or capture a new one.")] = None,
           serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Report layout problems: small touch targets, missing labels, overlaps, deep nesting..."""
-    serial, adb, _, _ = _global(ctx, serial, adb, None)
+    serial, adb, _, _, _ = _global(ctx, serial, adb, None)
     try:
         snap = load_snapshot(_resolve_snapshot(snapshot_dir, adb, serial))
     except (AdbError, BuildError, SnapshotError) as e:
@@ -347,7 +357,7 @@ def diff(ctx: typer.Context, first: Annotated[Optional[Path], typer.Argument(hel
          second: Annotated[Optional[Path], typer.Argument(help="Newer snapshot (picked when omitted).")] = None,
          serial: SerialOpt = None, adb: AdbOpt = None) -> None:
     """Show views added, removed and changed between two snapshots."""
-    serial, adb, _, _ = _global(ctx, serial, adb, None)
+    serial, adb, _, _, _ = _global(ctx, serial, adb, None)
     try:
         dir_a = _resolve_snapshot(first, adb, serial, "First snapshot")
         dir_b = _resolve_snapshot(second, adb, serial, "Second snapshot")

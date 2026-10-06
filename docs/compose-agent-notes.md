@@ -197,7 +197,7 @@ the real names from inside the app.
 |---|---|
 | `src/alayout/agentbuild.py` | finds JDK + SDK build-tools + `android.jar`, compiles the bundled Java agent (javac → d8), links a per-app manifest (aapt2), adds `classes.dex`, zipaligns, apksigner-signs. Caches APKs + keystore in `cache_dir()` (`ALAYOUT_CACHE` overrides). `signing_keys()` = keys to try; `build_agent(package, key=...)`. |
 | `src/alayout/agent.py` | device flow: `foreground()`, `is_debuggable()`, `install_agent()`, `prepare()` (clean mailbox), `start()` = install + force-stop + `am instrument -w` in a thread + `am start`, `request()`/`read_dump()` (file mailbox via `run-as`), `finish()`, `collect(adb, wait, log, ...) -> Session`, `parse_agent_dump()`, `ComposeHit`/`AgentDump`. `SignatureRefused` → try the next key. |
-| `src/alayout/compose.py` | `apply_compose_names(root, hits)`, `GENERIC_COMPOSABLES` (Box/Text/…); joins agent nodes to snapshot nodes by bounds (exact first, then ≥80 % overlap, preferring a name the app wrote). |
+| `src/alayout/compose.py` | **Preferred: `graft_compose_tree(root, hits)`** — rebuilds the real composable tree under each `AndroidComposeView` from the agent's `pathIds` (stable per-group ids): composables are interned by their id-prefix so a shared `RadioGroup` is **one** node with the items nested under it, internal nodes get the union of their leaves' bounds, interop `AndroidView`s are kept, and uiautomator semantics are folded onto the matching leaves by bounds. Returns `None` when the dump has no ids (older agent) → fall back to `apply_compose_names(root, hits)`, the flat bounds-overlay (exact first, then ≥80 % overlap, preferring a name the app wrote). `GENERIC_COMPOSABLES`/`STRUCTURAL_COMPOSABLES` classify names. |
 | `src/alayout/build.py` | `_apply_names()`; `capabilities["compose"]` = `ok (N of M Compose views named)` or the reason it failed. |
 | `capture.py` / `snapshot_io.py` | `RawCapture.compose_json`, kept in the snapshot as `raw/compose.json`. |
 | `adb.py` | `Adb.install()`/`Adb.uninstall()`, shared `sdk_dirs()`. |
@@ -221,7 +221,23 @@ the real names from inside the app.
   zero-arg / one-arg / void / static-extension methods, `run`/`runWith`/`runInt`, cached lookups.
 
 Answer JSON: `{agent, request, package, tooling, windows:[{root, activity, left, top,
-composeViews:[{view, bounds, groups, nodes:[{bounds, rect, sourceInfo, path}], debug?}]}], errors:[]}`
+composeViews:[{view, bounds, groups, nodes:[{bounds, rect, sourceInfo, path, pathIds}], debug?}]}], errors:[]}`
+
+**Subcomposition stitching** (`Scaffold`, `LazyColumn`, …): `collectNames` walks **only the main
+composition table** (per holder: `compositionData`), never every reachable table. A `SubcomposeLayout`
+builds its slots (content, bars, list items) in separate tables; those are walked only by
+`collectSubcomposition`, which prefixes each with the full path+ids of the host `SubcomposeLayout`
+node. Walking all tables up front (the old behaviour) named the subcomposition groups first with a
+short path and the `walked` guard then blocked the prefixed walk — so `QuestionContent` hung beside
+`Scaffold` instead of under it, and the prefix code was effectively dead. The node walk reaches every
+on-screen subcomposition through its host node, so nothing emitted is lost.
+
+**`pathIds`** (added for the nested tree): one stable id per `path` element, `base + groupIndex`
+where every slot table gets a globally-unique `base` per ComposeView. So the one `RadioGroup` that
+every list item is composed through has the same id in each item's path, and the host nests the
+items under a single node instead of repeating the path on each (see `ComposeDump.pathOf`/`Chain`
+and `graft_compose_tree`). The tree label is now just the composable's own name; the full call path
+stays in the detail rows. Ids line up one-to-one with names or are dropped on the host.
 
 ## Verified on the device (Xiaomi vayu, Android 13 / API 33, debug build of `com.quitsmoke.tracker`)
 

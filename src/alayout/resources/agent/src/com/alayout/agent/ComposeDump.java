@@ -42,6 +42,11 @@ public final class ComposeDump {
     private final List<String> errors = new ArrayList<String>();
     private final Map<Object, Group> named = new IdentityHashMap<Object, Group>();
     private final Set<Object> walked = Collections.newSetFromMap(new IdentityHashMap<Object, Boolean>());
+    /** A globally-unique base per slot table, so `base + groupIndex` is a stable id for every group
+      * of one ComposeView: the same `RadioGroup` every list item passes through gets the same id, so
+      * the host can nest the items under one node instead of repeating the path on each. */
+    private final Map<Object, Integer> tableBase = new IdentityHashMap<Object, Integer>();
+    private int nextBase;
     private final List<View> seen = new ArrayList<View>();
     private final List<String> samples = new ArrayList<String>();
     private int groups;
@@ -318,6 +323,8 @@ public final class ComposeDump {
         view.getLocationOnScreen(location);
         named.clear();
         walked.clear();
+        tableBase.clear();
+        nextBase = 0;
         samples.clear();
         groups = 0;
         collectNames(view);
@@ -346,10 +353,14 @@ public final class ComposeDump {
             if (coordinator != null) {
                 put(info, "coordinator", reflect(coordinator));
             }
-            Object table = tableOf(view);
+            Object table = rootTable(view);  // the table collectNames actually walks
+            put(info, "rootTable", table != null);
+            if (table == null) {
+                table = tableOf(view);
+            }
             if (table != null) {
                 put(info, "table", reflect(table));
-                put(info, "groups", groups(table));
+                put(info, "groups", groups(table));  // its top groups: the app root, not a Scaffold sub
             }
             put(json, "debug", info);
         }
@@ -364,8 +375,24 @@ public final class ComposeDump {
       *
       * `AndroidComposeView` does not hold the composition itself -- the `ComposeView`/
       * `AbstractComposeView` above it does -- so the search goes up the view chain.
+      *
+      * Only the *main* composition is walked here, with no prefix. A `Scaffold`/`LazyColumn` builds
+      * its slots (content, bars, list items) in *subcompositions* -- separate slot tables -- and those
+      * are walked by {@link #collectSubcomposition} instead, which prefixes them with the full path of
+      * the `SubcomposeLayout` node that hosts them. Walking every reachable table here (subcompositions
+      * included) would name their groups first, with a short path, and the prefix walk -- blocked by
+      * the `walked` guard -- would never run; so `QuestionContent` would hang beside `Scaffold`
+      * instead of under it. The node walk reaches every on-screen subcomposition through its host node,
+      * so nothing emitted is lost by leaving them to `collectSubcomposition`.
       */
     private void collectNames(View view) {
+        Object root = rootTable(view);
+        if (root != null) {
+            walkTable(root, Collections.<String>emptyList(), Collections.<Integer>emptyList());
+            return;
+        }
+        // no root composition we can reach directly: fall back to walking every reachable table with
+        // no prefix -- nodes still get named, but a subcomposition's path is short (pre-fix behaviour)
         List<Object> holders = holders(view);
         List<Object> tables = new ArrayList<Object>();
         for (int i = 0; i < holders.size(); i++) {
@@ -376,8 +403,39 @@ public final class ComposeDump {
             return;
         }
         for (int i = 0; i < tables.size(); i++) {
-            walkTable(tables.get(i), Collections.<String>emptyList());
+            walkTable(tables.get(i), Collections.<String>emptyList(), Collections.<Integer>emptyList());
         }
+    }
+
+    /** The view's own (root) composition slot table, reached by walking the composition object
+      * directly -- `ComposeView.composition` (a `WrappedComposition`) -> `original` (`CompositionImpl`)
+      * -> `slotTable` -- rather than by searching the object graph, whose first hit is often a
+      * `Scaffold`/`LazyColumn` subcomposition. Returning the root (and only the root) is what lets
+      * `collectSubcomposition` thread each subcomposition under its real host. */
+    private Object rootTable(View view) {
+        for (Object holder : holders(view)) {
+            Object comp = Ref.field(holder, "composition");
+            if (comp == null) {
+                comp = Ref.call(holder, "getComposition");
+            }
+            for (int hop = 0; hop < 4 && comp != null; hop++) {
+                Object slot = Ref.field(comp, "slotTable");
+                if (isSlotTable(slot)) {
+                    return slot;
+                }
+                Object data = Ref.call(comp, "getCompositionData", "getOriginalCompositionData");
+                if (isSlotTable(data)) {
+                    return data;
+                }
+                comp = Ref.field(comp, "original", "composition");  // WrappedComposition -> impl
+            }
+        }
+        return null;
+    }
+
+    /** A raw `SlotTable` (walkable by group index), as opposed to a `CompositionData` wrapper. */
+    private static boolean isSlotTable(Object table) {
+        return table != null && Ref.call(table, "getGroupsSize") instanceof Integer;
     }
 
     /** Where a composition may live: the ComposeView and the AndroidComposeView it hosts. */
@@ -503,7 +561,7 @@ public final class ComposeDump {
 
     /** Every group of the slot table, depth first: the source information of the group that
       * emitted a node, together with the composable functions it was called through. */
-    private void walkGroups(Object group, List<String> path, int depth) {
+    private void walkGroups(Object group, List<String> path, List<Integer> ids, int depth) {
         if (groups++ > MAX_GROUPS || depth > MAX_DEPTH) {
             return;
         }
@@ -513,15 +571,18 @@ public final class ComposeDump {
             String info = Ref.text(Ref.call(child, "getSourceInfo"));
             Object node = nodeOf(child);
             List<String> names = path;
+            List<Integer> childIds = ids;
             String name = functionName(info);
             if (name != null) {
                 names = new ArrayList<String>(path);
                 names.add(name);
+                childIds = new ArrayList<Integer>(ids);
+                childIds.add(Integer.valueOf(System.identityHashCode(child)));  // best effort: no index
             }
             if (node != null && !named.containsKey(node)) {
-                named.put(node, new Group(info, names));
+                named.put(node, new Group(info, names, childIds));
             }
-            walkGroups(child, names, depth + 1);
+            walkGroups(child, names, childIds, depth + 1);
         }
     }
 
@@ -568,24 +629,37 @@ public final class ComposeDump {
         // carried in as a prefix to join the chain across the composition boundary
         Group host = named.get(node);
         List<String> prefix = host != null ? host.path : Collections.<String>emptyList();
+        List<Integer> prefixIds = host != null ? host.pathIds : Collections.<Integer>emptyList();
         List<Object> tables = new ArrayList<Object>();
         compositionTables(state, tables);
         for (int i = 0; i < tables.size(); i++) {
-            walkTable(tables.get(i), prefix);
+            walkTable(tables.get(i), prefix, prefixIds);
         }
     }
 
     /** Walk a slot table once: several nodes of a list share the table that produced them. */
-    private void walkTable(Object table, List<String> prefix) {
+    private void walkTable(Object table, List<String> prefix, List<Integer> prefixIds) {
         if (!walked.add(table)) {
             return;
         }
         Object size = Ref.call(table, "getGroupsSize");
         if (size instanceof Integer) {
-            indexWalk(table, ((Integer) size).intValue(), prefix);
-        } else {
-            walkGroups(table, new ArrayList<String>(prefix), 0);  // not a raw SlotTable: best effort
+            indexWalk(table, ((Integer) size).intValue(), prefix, prefixIds);
+        } else {  // not a raw SlotTable: best effort, with identity-hash ids
+            walkGroups(table, new ArrayList<String>(prefix), new ArrayList<Integer>(prefixIds), 0);
         }
+    }
+
+    /** A stable id base for this table: `base + groupIndex` identifies each group within the view. */
+    private int baseOf(Object table, int size) {
+        Integer existing = tableBase.get(table);
+        if (existing != null) {
+            return existing.intValue();
+        }
+        int base = nextBase;
+        nextBase += (size > 0 ? size : 1) + 1;
+        tableBase.put(table, Integer.valueOf(base));
+        return base;
     }
 
     /** The slot table's group records are 5 ints each; the parent group index is the 3rd field. These
@@ -602,18 +676,22 @@ public final class ComposeDump {
       * tooling `getCompositionGroups()` view returns a null node for every source-info group, so once
       * collection is on the iterator loses almost every node. The composable path is the function
       * names of the group's ancestors (parent index read straight from the `groups` int array). */
-    private void indexWalk(Object table, int size, List<String> prefix) {
+    private void indexWalk(Object table, int size, List<String> prefix, List<Integer> prefixIds) {
         Object raw = Ref.call(table, "getGroups");
         int[] groupArray = raw instanceof int[] ? (int[]) raw : null;
+        int base = baseOf(table, size);
         for (int i = 0; i < size && groups < MAX_GROUPS; i++) {
             groups++;
             Object node = nodeInGroup(table, i);
             if (node == null || named.containsKey(node)) {
                 continue;
             }
+            Chain chain = pathOf(table, groupArray, i, base);
             List<String> path = new ArrayList<String>(prefix);
-            path.addAll(pathOf(table, groupArray, i));
-            named.put(node, new Group(sourceInfoAt(table, i), path));
+            path.addAll(chain.names);
+            List<Integer> ids = new ArrayList<Integer>(prefixIds);
+            ids.addAll(chain.ids);
+            named.put(node, new Group(sourceInfoAt(table, i), path, ids));
         }
     }
 
@@ -629,14 +707,16 @@ public final class ComposeDump {
         return null;
     }
 
-    /** The composable names from the root down to group `index` (its own group included). */
-    private List<String> pathOf(Object table, int[] groupArray, int index) {
-        List<String> up = new ArrayList<String>();
+    /** The composable names from the root down to group `index` (its own group included), each with
+      * a stable id (`base + groupIndex`) so the host can tell when two nodes share an ancestor. */
+    private Chain pathOf(Object table, int[] groupArray, int index, int base) {
+        Chain up = new Chain();
         int current = index;
         for (int guard = 0; current >= 0 && guard < MAX_DEPTH; guard++) {
             String name = functionName(sourceInfoAt(table, current));
             if (name != null) {
-                up.add(name);
+                up.names.add(name);
+                up.ids.add(Integer.valueOf(base + current));
             }
             int at = current * GROUP_FIELDS + PARENT_OFFSET;
             int parent = groupArray != null && at < groupArray.length ? groupArray[at] : -1;
@@ -645,9 +725,10 @@ public final class ComposeDump {
             }
             current = parent;
         }
-        List<String> path = new ArrayList<String>();
-        for (int i = up.size() - 1; i >= 0; i--) {
-            path.add(up.get(i));
+        Chain path = new Chain();
+        for (int i = up.names.size() - 1; i >= 0; i--) {
+            path.names.add(up.names.get(i));
+            path.ids.add(up.ids.get(i));
         }
         return path;
     }
@@ -688,6 +769,7 @@ public final class ComposeDump {
             if (group != null) {
                 put(json, "sourceInfo", group.sourceInfo);
                 put(json, "path", new JSONArray(group.path));
+                put(json, "pathIds", new JSONArray(group.pathIds));
             }
             out.put(json);
         }
@@ -799,11 +881,19 @@ public final class ComposeDump {
     private static final class Group {
         final String sourceInfo;
         final List<String> path;
+        final List<Integer> pathIds;
 
-        Group(String sourceInfo, List<String> path) {
+        Group(String sourceInfo, List<String> path, List<Integer> pathIds) {
             this.sourceInfo = sourceInfo;
             this.path = path;
+            this.pathIds = pathIds;
         }
+    }
+
+    /** A call path as two parallel lists: the composable names and their stable group ids. */
+    private static final class Chain {
+        final List<String> names = new ArrayList<String>();
+        final List<Integer> ids = new ArrayList<Integer>();
     }
 
     private static final class Placed {

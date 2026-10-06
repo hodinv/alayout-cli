@@ -10,9 +10,12 @@ from typing import Mapping
 
 from PIL import Image
 from rich.text import Text
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.coordinate import Coordinate
+from textual.message import Message
 from textual.screen import ModalScreen
 from textual.widget import Widget
 from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
@@ -183,6 +186,55 @@ class ScreenshotScreen(ModalScreen):
         shot.border_subtitle = "esc: close  o: open PNG in image viewer"
 
 
+class LayoutTree(Tree):
+    """The view tree. A click on a name selects it (and previews it); the ▶/▼ arrow (or `space`)
+    expands/collapses -- the name no longer toggles. A double-click on a name opens the PNG for
+    that view."""
+
+    auto_expand = False  # selecting a node must not expand it; only the toggle arrow / space does
+
+    class NodeActivated(Message):
+        """A name was double-clicked."""
+
+        def __init__(self, node: ViewNode) -> None:
+            self.node = node
+            super().__init__()
+
+    def _on_click(self, event: events.Click) -> None:
+        # Textual dispatches `_on_click` to every class in the MRO, so the stock Tree handler still
+        # runs: it toggles on the ▶/▼ arrow and selects (without expanding, since auto_expand is off)
+        # on a name. We only add the double-click-a-name shortcut; we must not call super (that would
+        # run the stock handler a second time and toggle the arrow twice, cancelling it out).
+        meta = event.style.meta
+        if event.chain == 2 and "line" in meta and not meta.get("toggle", False):
+            node = self.get_node_at_line(meta["line"])
+            if node is not None and node.data is not None:
+                self.post_message(self.NodeActivated(node.data))
+
+
+class PropsTable(DataTable):
+    """The property table. A double-click on a row copies that property's value to the clipboard."""
+
+    VALUE_COLUMN = 2  # source, property, value
+
+    class ValueCopied(Message):
+        def __init__(self, value: str) -> None:
+            self.value = value
+            super().__init__()
+
+    async def _on_click(self, event: events.Click) -> None:
+        await super()._on_click(event)  # let the click move the row cursor first
+        if event.chain != 2 or self.row_count == 0:
+            return
+        try:
+            cell = self.get_cell_at(Coordinate(self.cursor_row, self.VALUE_COLUMN))
+        except Exception:
+            return
+        value = cell.plain if isinstance(cell, Text) else str(cell)
+        if value:
+            self.post_message(self.ValueCopied(value))
+
+
 class LayoutApp(App):
     TITLE = "alayout"
     CSS = """
@@ -228,9 +280,9 @@ class LayoutApp(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
-            yield Tree(self._label(self.snapshot.root), data=self.snapshot.root, id="tree")
+            yield LayoutTree(self._label(self.snapshot.root), data=self.snapshot.root, id="tree")
             with Vertical(id="right"):
-                yield DataTable(id="props", cursor_type="row", zebra_stripes=True)
+                yield PropsTable(id="props", cursor_type="row", zebra_stripes=True)
                 yield DataTable(id="issues", cursor_type="row", zebra_stripes=True)
                 yield Wireframe(self.snapshot, self._image, self._image_note, id="wire")
         yield Input(placeholder="search id, class, text, content-desc  (Enter: find, Esc: close)", id="search")
@@ -420,3 +472,16 @@ class LayoutApp(App):
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.data_table.id == "issues":
             self._jump(self.issues[int(event.row_key.value)].node)
+
+    # --- double-click actions ---------------------------------------------------------------
+
+    def on_layout_tree_node_activated(self, event: LayoutTree.NodeActivated) -> None:
+        """Double-click a view's name: open its screenshot (the selected view outlined)."""
+        self.select(event.node)
+        self.action_open_screenshot()
+
+    def on_props_table_value_copied(self, event: PropsTable.ValueCopied) -> None:
+        """Double-click a property: copy its value to the clipboard."""
+        self.copy_to_clipboard(event.value)
+        shown = event.value if len(event.value) <= 60 else event.value[:59] + "…"
+        self.notify(f"copied: {shown}")

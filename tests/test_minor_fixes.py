@@ -101,7 +101,7 @@ def test_capture_to_unwritable_out_is_a_clean_error(tmp_path, monkeypatch):
 def test_apk_option_before_command_is_used(tmp_path, monkeypatch):
     seen = {}
     monkeypatch.setattr(cli, "_capture",
-                        lambda adb, serial, out, apk=None, compose=False, signing=None:
+                        lambda adb, serial, out, apk=None, compose=False, signing=None, show_ghosts=False:
                         seen.update(apk=apk, compose=compose) or tmp_path)
     runner.invoke(cli.app, ["--apk", "device", "--compose", "capture"])
     assert seen["apk"] == "device"

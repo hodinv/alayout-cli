@@ -65,6 +65,7 @@ class ComposeHit:
     file: str | None
     line: int | None
     path: tuple[str, ...] = ()
+    path_ids: tuple[int, ...] = ()  # one stable group id per path element (see ComposeDump.pathOf)
     source_info: str = ""
 
 
@@ -152,12 +153,16 @@ def parse_agent_dump(text: str) -> AgentDump:
                 info = node.get("sourceInfo") or ""
                 parsed = parse_source_information(info) if info else None
                 path = tuple(str(part) for part in node.get("path") or ())
+                path_ids = tuple(int(v) for v in node.get("pathIds") or ())
+                if len(path_ids) != len(path):
+                    path_ids = ()  # only trust ids that line up one-to-one with the names
                 dump.hits.append(ComposeHit(
                     bounds=Rect.from_list([int(v) for v in bounds]) if bounds else None,
                     name=_compose_name(path, parsed),
                     file=parsed[1] if parsed else None,
                     line=parsed[2] if parsed else None,
                     path=path or ((parsed[0],) if parsed else ()),
+                    path_ids=path_ids,
                     source_info=info))
     return dump
 

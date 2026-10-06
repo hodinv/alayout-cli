@@ -261,7 +261,11 @@ def test_name_click_does_not_toggle_expand():
     assert LayoutTree.auto_expand is False
 
 
-def test_double_click_property_copies_its_value():
+def test_double_click_property_copies_its_value(monkeypatch):
+    copied = []
+    # don't touch the real OS clipboard in the test; record what would be copied
+    monkeypatch.setattr("alayout.tui.app.copy_text", lambda text: copied.append(text) or True)
+
     async def scenario():
         app = LayoutApp(views_snapshot())
         async with app.run_test(size=(140, 45)) as pilot:
@@ -269,7 +273,8 @@ def test_double_click_property_copies_its_value():
             expected = table.get_cell_at(Coordinate(0, PropsTable.VALUE_COLUMN)).plain
             await pilot.click("#props", offset=(3, 1), times=2)  # first data row, double-click
             await pilot.pause()
-            assert app.clipboard == expected
+            assert copied == [expected]       # written to the OS clipboard
+            assert app.clipboard == expected  # and via OSC 52 for remote terminals
 
     asyncio.run(scenario())
 

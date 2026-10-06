@@ -45,6 +45,50 @@ def _load_image(snapshot: Snapshot, base_dir: Path | None) -> tuple[Image.Image 
         return None, f"cannot read the screenshot {snapshot.screenshot}: {e}"
 
 
+def _win_clipboard(text: str) -> bool:
+    """Put text on the Windows clipboard as CF_UNICODETEXT (handles non-ASCII, unlike clip.exe)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k, u = ctypes.windll.kernel32, ctypes.windll.user32
+        k.GlobalAlloc.restype, k.GlobalAlloc.argtypes = wintypes.HGLOBAL, [wintypes.UINT, ctypes.c_size_t]
+        k.GlobalLock.restype, k.GlobalLock.argtypes = wintypes.LPVOID, [wintypes.HGLOBAL]
+        k.GlobalUnlock.argtypes = [wintypes.HGLOBAL]
+        u.SetClipboardData.restype = wintypes.HANDLE
+        u.SetClipboardData.argtypes = [wintypes.UINT, wintypes.HANDLE]
+        buffer = ctypes.create_unicode_buffer(text.replace("\r\n", "\n").replace("\n", "\r\n"))
+        if not u.OpenClipboard(None):
+            return False
+        try:
+            u.EmptyClipboard()
+            handle = k.GlobalAlloc(0x0002, ctypes.sizeof(buffer))  # GMEM_MOVEABLE
+            pointer = k.GlobalLock(handle)
+            ctypes.memmove(pointer, buffer, ctypes.sizeof(buffer))
+            k.GlobalUnlock(handle)
+            u.SetClipboardData(13, handle)  # CF_UNICODETEXT
+            return True
+        finally:
+            u.CloseClipboard()
+    except Exception:
+        return False
+
+
+def copy_text(text: str) -> bool:
+    """Copy to the real OS clipboard; True on success. Terminal OSC 52 (App.copy_to_clipboard) is
+    unreliable on many Windows terminals, so the system clipboard is written directly here."""
+    if sys.platform == "win32":
+        return _win_clipboard(text)
+    for command in (["pbcopy"], ["wl-copy"], ["xclip", "-selection", "clipboard"],
+                    ["xsel", "--clipboard", "--input"]):
+        if shutil.which(command[0]):
+            try:
+                subprocess.run(command, input=text.encode("utf-8"), check=True, timeout=5)
+                return True
+            except (OSError, subprocess.SubprocessError):
+                continue
+    return False
+
+
 def open_file(path: Path, env: Mapping[str, str] | None = None) -> None:
     """Show a file in the system's default viewer; OSError when there is no way to show it."""
     env = os.environ if env is None else env
@@ -543,6 +587,11 @@ class LayoutApp(App):
 
     def on_props_table_value_copied(self, event: PropsTable.ValueCopied) -> None:
         """Double-click a property: copy its value to the clipboard."""
-        self.copy_to_clipboard(event.value)
+        copied = copy_text(event.value)  # the real OS clipboard (works locally)
+        self.copy_to_clipboard(event.value)  # OSC 52 as well, for remote/SSH terminals
         shown = event.value if len(event.value) <= 60 else event.value[:59] + "…"
-        self.notify(f"copied: {shown}")
+        if copied:
+            self.notify(f"copied: {shown}")
+        else:
+            self.notify(f"sent copy to the terminal: {shown} (no OS clipboard tool found; "
+                        "on Linux install xclip/xsel/wl-clipboard)", severity="warning")
